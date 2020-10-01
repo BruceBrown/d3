@@ -1,0 +1,45 @@
+
+#
+# Run the echo server on locahhost port 9000
+# Run the chat server on localhost port 7000
+#
+services = ["EchoServer", "ChatServer"]
+features = []
+
+[executor]
+executors = 4
+queue_size = 250
+time_slice = 20
+
+[[coordinator]]
+[coordinator.EchoCoordinator]
+tcp_address = "127.0.0.1:9000"
+
+[[coordinator]]
+[coordinator.ChatCoordinator]
+tcp_address = "127.0.0.1:7000"
+
+[coordinator.ChatCoordinator.kv]
+name_prompt = "Welcome, may I have you name?"
+gone_message = "Has left the building..."
+#
+# Here are the echo server components
+#
+[[component]]
+[component.EchoConsumer]
+enabled = true
+
+[[component]]
+[component.EchoProducer]
+enabled = true
+
+#
+# Here's the chat server components
+#
+[[component]]
+[component.ChatConsumer]
+enabled = true
+
+[[component]]
+[component.ChatProducer]
+enabled = true

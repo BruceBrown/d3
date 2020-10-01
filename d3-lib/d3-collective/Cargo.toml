@@ -1,0 +1,15 @@
+[package]
+name = "d3-collective"
+version = "0.1.0"
+authors = ["Bruce Brown <bruce_brown_1207@yahoo.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+crossbeam = "0.7.3"
+crossbeam-channel = "0.4.4"
+
+d3-machine = {version = "0.1.0", path = "../d3-machine"}
+d3-channel = {version = "0.1.0", path = "../d3-channel"}
+d3-tls = {version = "0.1.0", path = "../d3-tls"}

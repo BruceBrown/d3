@@ -1,0 +1,40 @@
+#
+# This development is `merged` with default, but not quite the way I'd like.
+# Need to find a replacement config management tool. But for now, this 
+# works well enough.
+#
+dev_mode = true
+log_level = "Debug"
+#
+# Enable Forwarder feature to run daisy_chain nad fanout_fanin tests.
+#features = ["Forwarder"]
+
+[executor]
+executors = 4
+queue_size = 250
+time_slice = 20
+
+[[additional]]
+[additional.Forwarder]
+run = [
+    "daisy_chain",
+    #"fanout_fanin",
+]
+
+[additional.Forwarder.default]
+timeout = 30
+machines = 100
+messages = 20
+iterations = 1
+
+[additional.Forwarder.daisy_chain]
+timeout = 10
+machines = 5000
+messages = 200
+iterations = 1
+
+[additional.Forwarder.fanout_fanin]
+fanin_capacity = 10000
+machines = 2000
+messages = 100
+iterations = 1
