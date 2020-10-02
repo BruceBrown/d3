@@ -54,6 +54,8 @@ pub type TaskInjector = Arc<deque::Injector<Task>>;
 pub trait ExecutorControl: Send + Sync {
     /// notifies the executor that an executor is parked
     fn parked_executor(&self, id: usize);
+    /// notifies the executor that an executor completed and can be joined
+    fn joinable_executor(&self, id: usize);
     /// stop the executor
     fn stop(&self);
 }

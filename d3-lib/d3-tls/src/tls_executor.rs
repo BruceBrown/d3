@@ -86,7 +86,17 @@ pub struct ExecutorData {
     pub notifier: ExecutorDataField,
 }
 impl ExecutorData {
-    pub fn sender_blocked(&mut self, adapter: SharedCollectiveSenderAdapter) {
+    pub fn recursive_block(&mut self) {
+        // we're called from a tls context, ExecutorData is for the current thread.
+        // we've already queue'd the sender, and now its trying to send more. This
+        // could go on forever, essentially blocking an executor. So, we're going
+        // to pause and drain this executor and then allow the send, that got us
+        // here, to continue, having sent the one that blocked it
+
+        // all we need to do is drain, we'll return after draining the current machine
+        self.drain();
+    }
+    pub fn sender_blocked(&mut self, channel_id: usize, adapter: SharedCollectiveSenderAdapter) {
         // we're called from a tls context, ExecutorData is for the current thread.
         // upon return, the executor will return back into the channel send, which will
         // complete the send, which is blocked. Consequently, we need to be careful
@@ -94,84 +104,70 @@ impl ExecutorData {
         if adapter.state.get() == CollectiveState::SendBlock {
             // if we are already SendBlock, then there is send looping within the
             // machine, and we need to use caution
-            log::info!("Executor {} detected recursive send block", self.id);
-            // this means we have to suspend the executor
-            // and launch a replacement.
-            match &self.notifier {
-                ExecutorDataField::Notifier(obj) => obj.notify_parked(self.id),
-                _ => log::error!("Executor {} can't notify monitor!!!", self.id),
-            };
-            // at this point, all the executor should do is drain outstanding
-            // sends (by compleing them) and then terminate.
-            self.state = ExecutorState::Parked;
-            self.drain(adapter);
+            log::info!("Executor {} detected recursive send block, this should not happen", self.id);
+            unreachable!("block_or_continue() should be called to prevent entering sender_blocked with a blocked machine")
         } else {
             // otherwise we can stack the incomplete send. Depth is a concern.
             // the sends could be offloaded, however it has the potential to
             // cause a problem with the afformentioned looping sender.
+            log::trace!("executor {} parking sender {}", self.id, channel_id);
             adapter.state.set(CollectiveState::SendBlock);
             self.blocked_senders.push(adapter);
         }
     }
-
-    /// Drain the executor, by completing all of the outstanding sends. Yes, this
-    /// could use a good refactorng. Fortunately, it seldom runs.
-    pub fn drain(&mut self, secondary: SharedCollectiveSenderAdapter) {
-        // we're just  going to sit here attempting to drain the blocked
-        // senders queue.
-        log::warn!("Executor {} is draining {} sends", self.id, self.blocked_senders.len() );
-        let secondary_id = secondary.id;
-        let mut secondary = Some(secondary);
+    fn drain(&mut self) {
+        // all we can do at this point is attempt to drain out sender queue
         let backoff = crossbeam::utils::Backoff::new();
         while !self.blocked_senders.is_empty() {
-                let mut still_blocked: Vec::<SharedCollectiveSenderAdapter> = Vec::with_capacity(self.blocked_senders.len());
-                for mut sender in self.blocked_senders.drain(..) {
-                    match sender.try_send() {
-                        Ok(()) => {
-                            if secondary.is_some() {
-                                if sender.id == secondary_id {
-                                    let adapter = secondary.take().unwrap();
-                                    still_blocked.push(adapter);
-                                } else {
-                                    match &self.notifier {
-                                        ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.id),
-                                        _ => log::error!("can't notify scheduler!!!"),
-                                    };
-                                }
-                            } else {
-                                match &self.notifier {
-                                    ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.id),
-                                    _ => log::error!("can't notify scheduler!!!"),
-                                };
-                            }
-                            backoff.reset();
-                        },
-                        Err(TrySendError::Disconnected) => {
-                            if secondary.is_some() {
-                                if sender.id == secondary_id {
-                                    let adapter = secondary.take().unwrap();
-                                    still_blocked.push(adapter);
-                                } else {
-                                    match &self.notifier {
-                                        ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.id),
-                                        _ => log::error!("can't notify scheduler!!!"),
-                                    };
-                                }
-                            } else {
-                                match &self.notifier {
-                                    ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.id),
-                                    _ => log::error!("can't notify scheduler!!!"),
-                                };
-                            }
-                            backoff.reset();
-                        },
-                        Err(TrySendError::Full) => {still_blocked.push(sender);},
-                    };
+            let mut still_blocked: Vec::<SharedCollectiveSenderAdapter> = Vec::with_capacity(self.blocked_senders.len());
+            let mut handled_recursive_sender = false;
+            for mut sender in self.blocked_senders.drain(..) {
+                match sender.try_send() {
+                    // handle the blocked sender that got us here
+                    Ok(()) if sender.id == self.machine_id => {
+                        backoff.reset();
+                        self.machine_state.set(CollectiveState::Running);
+                        handled_recursive_sender = true;
+                    },
+                    Err(TrySendError::Disconnected) if sender.id == self.machine_id => {
+                        backoff.reset();
+                        self.machine_state.set(CollectiveState::Running);
+                        handled_recursive_sender = true;
+                    },
+                    // handle all others
+                    Ok(()) => {
+                        backoff.reset(); 
+                        // let the scheduler know that this machine can now be scheduled
+                        match &self.notifier {
+                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.id),
+                            _ => log::error!("can't notify scheduler!!!"),
+                        };
+                    }
+                    Err(TrySendError::Disconnected) => {
+                        backoff.reset(); 
+                        // let the scheduler know that this machine can now be scheduled
+                        match &self.notifier {
+                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.id),
+                            _ => log::error!("can't notify scheduler!!!"),
+                        }; 
+                    },
+                    Err(TrySendError::Full) => {still_blocked.push(sender);},
                 }
-                backoff.snooze();
+            }
+            self.blocked_senders = still_blocked;
+            if handled_recursive_sender { break }
+            // if we haven't worked out way free, then its time to get another executor running
+            if backoff.is_completed() && self.state != ExecutorState::Parked {
+                // we need to notify the monitor that we're essentially dead.
+                self.state = ExecutorState::Parked;
+                match &self.notifier {
+                    ExecutorDataField::Notifier(obj) => obj.notify_parked(self.id),
+                    _ => log::error!("Executor {} doesn't have a notifier", self.id),
+                };        
+            }
+            backoff.snooze();
         }
-        self.last_blocked_send_len = 0;
-        log::info!("executor {} drained.", self.id);
+        log::debug!("drained recursive sender, allowing send to continue");
     }
 }
 

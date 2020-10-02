@@ -96,6 +96,7 @@ pub enum Additional {
 pub enum Field {
     daisy_chain,
     fanout_fanin,
+    forwarding_multiplier,
     machines,
     messages,
     iterations,

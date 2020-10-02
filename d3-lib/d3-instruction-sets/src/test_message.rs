@@ -10,8 +10,7 @@ pub enum TestMessage {
     TestCallback(Sender<TestMessage>, TestStruct),
     AddSender(Sender<TestMessage>),         // add a forwarding sender
     Notify(Sender<TestMessage>, usize),     // notify sender, via TestData, when the count of messages have been received
-    Add(u32),
-    Set(u32),
+    ForwardingMultiplier(usize),            // when forwarding, forward this many (use with caution)
 }
 
 /// Test structure for callback and exchange

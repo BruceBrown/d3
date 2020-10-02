@@ -51,6 +51,7 @@ struct RunParams {
     machine_count: usize,
     messages: usize,
     iterations: usize,
+    forwarding_multiplier: usize,
     timeout: std::time::Duration,
 }
 
@@ -67,6 +68,10 @@ impl From<settings::FieldMap> for RunParams {
             iterations: *map
                 .get(&settings::Field::iterations)
                 .expect("iterations missing"),
+            forwarding_multiplier: *map
+                .get(&settings::Field::forwarding_multiplier)
+                .expect("forwarding_multiplier missing"),
+
             timeout: std::time::Duration::from_secs(
                 *map.get(&settings::Field::timeout).expect("timeout missing") as u64,
             ),
@@ -98,13 +103,16 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
         let (_f, s) = executor::connect(Forwarder::new(idx));
         instances.push(_f);
         last_sender.send(TestMessage::AddSender(s.clone())).unwrap();
+        last_sender.send(TestMessage::ForwardingMultiplier(params.forwarding_multiplier)).unwrap();
         last_sender = s.clone();
         machines.push(s);
     }
     // turn the last into a notifier
+    let total_messages = params.messages * (params.forwarding_multiplier.pow((params.machine_count - 1) as u32));
+    log::info!("expecting {} messages", total_messages);
     let (sender, receiver) = channel();
     last_sender
-        .send(TestMessage::Notify(sender, params.messages))
+        .send(TestMessage::Notify(sender, total_messages))
         .unwrap();
 
     // drive the forwarders...
@@ -126,7 +134,7 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
         log::info!("sent an iteration, waiting for response");
         match receiver.recv_timeout(params.timeout) {
             Ok(m) => {
-                assert_eq!(m, TestMessage::TestData(params.messages));
+                assert_eq!(m, TestMessage::TestData(total_messages));
                 log::info!("an iteration completed");
             }
             Err(_) => {
@@ -223,12 +231,14 @@ pub struct Forwarder {
     id: usize,
     /// received_count is the count of messages received by this forwarder.
     received_count: AtomicUsize,
+    /// send_count is the count of messages sent by this forwarder.
+    send_count: AtomicUsize,
     /// The mutable bits...
-    mutations: Mutex<ForwarderMutations>,
+    mutable: Mutex<ForwarderMutable>,
 }
 
-#[derive(Default)]
-pub struct ForwarderMutations {
+#[derive(SmartDefault)]
+pub struct ForwarderMutable {
     /// collection of senders, each will be sent any received message.
     senders: Vec<TestMessageSender>,
     /// notify_count is compared against received_count for means of notifcation.
@@ -236,7 +246,10 @@ pub struct ForwarderMutations {
     /// notify_sender is sent a TestData message with the data being the number of messages received.
     notify_sender: Option<TestMessageSender>,
     /// sequencing
-    sequence: usize,
+    sequence: AtomicUsize,
+    /// forwarding multiplier
+    #[default = 1]
+    forwarding_multiplier: usize,
 }
 
 impl Forwarder {
@@ -252,6 +265,7 @@ impl Forwarder {
     pub fn get_and_clear_received_count(&self) -> usize {
         let received_count = self.received_count.load(Ordering::SeqCst);
         self.received_count.store(0, Ordering::SeqCst);
+        self.send_count.store(0, Ordering::SeqCst);
         received_count
     }
 }
@@ -259,54 +273,69 @@ impl Forwarder {
 impl Machine<TestMessage> for Forwarder {
     fn disconnected(&self) {
         // drop senders
-        let mut mutations = self.mutations.lock().unwrap();
-        mutations.senders.clear();
-        let sender = mutations.notify_sender.take();
+        let mut mutable = self.mutable.lock().unwrap();
+        mutable.senders.clear();
+        let sender = mutable.notify_sender.take();
         drop(sender);
     }
 
     fn receive(&self, message: TestMessage) {
         // it a bit ugly, but its also a clean way to handle the data we need to access
-        let mut mutations = self.mutations.lock().unwrap();
+        let mut mutable = self.mutable.lock().unwrap();
         // handle configuation messages without bumping counters
         match message {
             TestMessage::Notify(sender, on_receive_count) => {
-                mutations.notify_sender = Some(sender);
-                mutations.notify_count = on_receive_count;
+                mutable.notify_sender = Some(sender);
+                mutable.notify_count = on_receive_count;
                 return;
             }
             TestMessage::AddSender(sender) => {
-                mutations.senders.push(sender);
+                mutable.senders.push(sender);
+                return;
+            }
+            TestMessage::ForwardingMultiplier(count) => {
+                mutable.forwarding_multiplier = count;
                 return;
             }
             _ => (),
         }
         self.received_count.fetch_add(1, Ordering::SeqCst);
         // forward the message
-        mutations
+        match message {
+            TestMessage::TestData(_seq) => mutable
             .senders
             .iter()
-            .for_each(|sender| sender.send(message.clone()).unwrap());
-        if mutations.notify_count > 0 && (self.received_count.load(Ordering::SeqCst) % 10000 == 0) {
+            .for_each(|sender| for _ in 0..mutable.forwarding_multiplier {
+                let count = self.send_count.fetch_add(1, Ordering::SeqCst);
+                sender.send(TestMessage::TestData(count)).unwrap()
+            }),
+            _ => mutable
+            .senders
+            .iter()
+            .for_each(|sender| for _ in 0..mutable.forwarding_multiplier { sender.send(message.clone()).unwrap()}),
+        };
+        if mutable.notify_count > 0 && (self.received_count.load(Ordering::SeqCst) % 10000 == 0) {
             log::info!(
-                "rcvs {} out of {}",
+                "forwarder {} rcvs {} out of {}", self.id,
                 self.received_count.load(Ordering::SeqCst),
-                mutations.notify_count
+                mutable.notify_count
             );
         }
         // send notification if we've met the criteria
-        if self.received_count.load(Ordering::SeqCst) == mutations.notify_count
-            && mutations.notify_sender.is_some()
+        if self.received_count.load(Ordering::SeqCst) == mutable.notify_count
+            && mutable.notify_sender.is_some()
         {
-            mutations
+            log::info!("sending notification that we've received {} messages", mutable.notify_count);
+            if mutable
                 .notify_sender
                 .as_ref()
                 .unwrap()
                 .send(TestMessage::TestData(
                     self.received_count.load(Ordering::SeqCst),
                 ))
-                .unwrap();
+                .is_err() { log::error!("unable to send notification"); }
             self.received_count.store(0, Ordering::SeqCst);
+            self.send_count.store(0, Ordering::SeqCst);
         }
         match message {
             TestMessage::TestCallback(sender, mut test_struct) => {
@@ -315,10 +344,12 @@ impl Machine<TestMessage> for Forwarder {
             }
             TestMessage::TestData(seq) => {
                 if seq == 0 as usize {
-                    mutations.sequence = 0
+                    mutable.sequence.store(1, Ordering::SeqCst);
                 } else {
-                    mutations.sequence += 1;
-                    assert_eq!(seq, mutations.sequence);
+                    let count = mutable.sequence.fetch_add(1, Ordering::SeqCst);
+                    if seq != count {
+                        log::debug!("forwarder {}, received seq {}, expecting {}", self.id, seq, count);
+                    }
                 }
             }
             _ => (),

@@ -4,10 +4,11 @@
 # works well enough.
 #
 dev_mode = true
-log_level = "Debug"
+log_level = "Info"
 #
 # Enable Forwarder feature to run daisy_chain nad fanout_fanin tests.
-#features = ["Forwarder"]
+features = ["Forwarder"]
+services = []
 
 [executor]
 executors = 4
@@ -28,9 +29,10 @@ messages = 20
 iterations = 1
 
 [additional.Forwarder.daisy_chain]
-timeout = 10
-machines = 5000
-messages = 200
+timeout = 600
+machines = 10
+messages = 1
+forwarding_multiplier = 5
 iterations = 1
 
 [additional.Forwarder.fanout_fanin]

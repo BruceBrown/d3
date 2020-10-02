@@ -66,7 +66,7 @@ pub struct ComponentInfo {
 // A utility function that can be use when sending
 #[inline]
 pub fn send_cmd<T>(sender: &Sender<T>, cmd: T)
-where T: MachineImpl + MachineImpl<InstructionSet = T>,
+where T: MachineImpl + MachineImpl<InstructionSet = T> + std::fmt::Debug
 {
     match sender.send(cmd) {
         Ok(_) => (),

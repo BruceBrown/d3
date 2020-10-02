@@ -105,7 +105,7 @@ impl ThreadData {
                         log::info!("System Monitor: Executor {} is parked", id);
                         self.executor.parked_executor(id);
                     }
-                    _ => log::warn!("System Monitor received an unhandled message {:#?}", m),
+                    MonitorMessage::Terminated(id) => self.executor.joinable_executor(id),
                 },
             }
         }

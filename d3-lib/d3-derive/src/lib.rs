@@ -22,8 +22,17 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             type Adapter = #adapter_ident;
             type SenderAdapter = #sender_adapter_ident;
             type InstructionSet = #name;
-
-            fn park_sender(sender: crossbeam::Sender<Self::InstructionSet>, instruction: Self::InstructionSet) -> Result<(),Self::InstructionSet> {
+            fn block_or_continue() {
+                tls_executor_data.with(|t|{
+                    let mut tls = t.borrow_mut();
+                    // main thread can always continue and block
+                    if tls.id == 0 { return }
+                    if tls.machine_state.get() != CollectiveState::Running {
+                        tls.recursive_block();
+                    }
+                });
+            }
+            fn park_sender(channel_id: usize, sender: crossbeam::Sender<Self::InstructionSet>, instruction: Self::InstructionSet) -> Result<(),Self::InstructionSet> {
                 //Err(instruction)
                 tls_executor_data.with(|t|{
                     let mut tls = t.borrow_mut();
@@ -41,7 +50,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                             state: tls.machine_state.clone(),
                             normalized_adapter: Box::new(adapter),
                         };
-                        tls.sender_blocked(shared_adapter);
+                        tls.sender_blocked(channel_id, shared_adapter);
                         Ok(())
                     }
                 })

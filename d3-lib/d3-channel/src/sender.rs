@@ -18,6 +18,7 @@ pub struct Sender<T: MachineImpl>
 impl<T> Sender<T>
 where T: MachineImpl
 {
+    pub fn get_id(&self) -> usize { self.channel_id }
     pub fn try_send(&self, msg: T) -> Result<(), TrySendError<T>> {
         self.sender.try_send(msg)
     }
@@ -27,12 +28,17 @@ where T: MachineImpl
     }
 
     pub fn send(&self, msg: T) -> Result<(), SendError<T>>
-    where T: MachineImpl + MachineImpl<InstructionSet = T>
+    where T: MachineImpl + MachineImpl<InstructionSet = T> + std::fmt::Debug,
     {
+        // this could be a series of sends from a machine, which is already
+        // blocked. Need to check if that is the case, otherwise this send
+        // could succeed and we'd be sending out of order.
+        <T as MachineImpl>::block_or_continue();
         match self.sender.try_send(msg) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(instruction)) => {
-                match <T as MachineImpl>::park_sender(
+                log::debug!("parking sender {} with cmd {:#?}", self.channel_id, instruction);
+                match <T as MachineImpl>::park_sender(self.channel_id,
                     self.sender.clone() as crossbeam::Sender<<T as MachineImpl>::InstructionSet>,
                     instruction) {
                     Ok(()) => Ok(()),
