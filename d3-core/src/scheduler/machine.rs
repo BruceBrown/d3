@@ -1,11 +1,8 @@
 #![allow(dead_code)]
 use super::*;
 
-use d3_channel::Sender;
-use d3_collective::MachineAdapter;
-use d3_machine::{Machine, MachineImpl};
-
-use crate::setup_teardown::Server;
+use crate::channel::{sender::*};
+use self::setup_teardown::*;
 
 ///
 /// connect, as the name implies, connects a machine into the system. Toss

@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use super::*;
+use self::collective::*;
 
 /// The MachineAdapter lives in d3-collective. This is due to a
 /// dependency upon SharedCollectiveAdapter and Sender.

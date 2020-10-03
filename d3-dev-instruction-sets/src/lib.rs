@@ -1,23 +1,12 @@
 #[allow(unused_imports)]
-#[macro_use]
-extern crate smart_default;
+#[macro_use] extern crate smart_default;
 
 
 // this should become a prelude
 #[allow(unused_imports)]
 use std::sync::{Arc,Mutex};
 
-#[allow(unused_imports)]
-use d3_channel::{Sender, Receiver, channel, channel_with_capacity};
-
-#[allow(unused_imports)]
-use d3_machine::{MachineImpl, Machine, SharedProtectedObject};
-
-#[allow(unused_imports)]
-use d3_collective::*;
-
-#[allow(unused_imports)]
-use d3_tls::*;
+use d3_core::machine_impl::*;
 
 #[allow(unused_imports)]
 use d3_derive::*;

@@ -1,4 +1,5 @@
 use super::*;
+use crossbeam::deque;
 
 ///
 /// These are traits that are used for major components

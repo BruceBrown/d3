@@ -7,8 +7,10 @@ use std::sync::{Arc, Mutex};
 use std::error::Error;
 
 #[allow(unused_imports)]
-use d3_lib::{executor};
-use d3_lib::machine_impl::*;
+use d3_core::executor::{self};
+use d3_core::machine_impl::*;
+use d3_derive::*;
+
 use d3_components::*;
 use d3_components::settings::{self, SimpleConfig, Service};
 use d3_components::components::{ComponentCmd, ComponentSender, AnySender};

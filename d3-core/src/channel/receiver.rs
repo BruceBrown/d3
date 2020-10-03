@@ -1,4 +1,6 @@
 use super::*;
+use crossbeam::{TryRecvError, RecvError, RecvTimeoutError};
+use self::{connection::*};
 
 /// Wrap the crossbeam::Sender so that we warn on block, In the future we might
 /// park and continue later.Receiver

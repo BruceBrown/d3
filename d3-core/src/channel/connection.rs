@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, Weak};
+use super::*;
 
 /// The Connection provides a weak refernce between the sender and receiver.
 /// The value of which is dubious. It may provide some feedback mechanisms.

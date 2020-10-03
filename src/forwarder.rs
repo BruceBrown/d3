@@ -3,8 +3,8 @@ use super::*;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use d3_lib::machine_impl::*;
-use d3_lib::instruction_sets::{TestMessage};
+use d3_core::machine_impl::*;
+use d3_dev_instruction_sets::{TestMessage};
 
 
 struct ForwarderSettings {
@@ -349,6 +349,7 @@ impl Machine<TestMessage> for Forwarder {
                     let count = mutable.sequence.fetch_add(1, Ordering::SeqCst);
                     if seq != count {
                         log::debug!("forwarder {}, received seq {}, expecting {}", self.id, seq, count);
+                        assert_eq!(seq, count);
                     }
                 }
             }

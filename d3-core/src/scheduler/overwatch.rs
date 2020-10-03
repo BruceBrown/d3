@@ -1,4 +1,5 @@
 use super::*;
+use self::{traits::*};
 
 type MonitorReceiver = crossbeam::Receiver<MonitorMessage>;
 

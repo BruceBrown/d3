@@ -1,6 +1,7 @@
 
 use super::*;
-use std::iter;
+use crossbeam::deque;
+use self::{traits::*};
 
 const WORKER_MESSAGE_QUEUE_COUNT: usize = 10;
 
@@ -89,7 +90,6 @@ impl ExecutorNotifier for Notifier {
     }
 }
 
-
 ///
 /// This is the model I've adopted for managing worker threads. The thread
 /// data needs to be built in a way that it can be moved as a self -- it just
@@ -107,6 +107,8 @@ struct ThreadData {
     run_queue: Arc<deque::Injector<Task>>,
     wait_queue: Arc<deque::Injector<Task>>,
     work: deque::Worker<Task>,
+    stealers: Stealers,
+    shared_info: Arc<Mutex<SharedExecutorInfo>>,
 }
 impl ThreadData {
     /// build stealers, the workers are a shared RwLock object. Clone
@@ -123,30 +125,16 @@ impl ThreadData {
         stealers
     }
 
-    // this needs refactoring...
-    fn spawn(self) -> Option<std::thread::JoinHandle<()>> {
+
+    // This is the executor thread. It has a few responsibilites. It listens for,
+    // and acts upon events (via channel). It complete senders that are blocked.
+    // It gets tasks and runs them. It might be better to have a select
+    // for blocked senders, or aggregate them and have a separate thread responsible
+    // for them. In a well tuned system, we shouldn't see blocking of senders,
+    // which represents a failure in dataflow management.
+    fn spawn(mut self) -> Option<std::thread::JoinHandle<()>> {
         let thread = std::thread::spawn(move || {
-            // setup TLS, to be use when blocking
-            let notifier = Notifier {
-                monitor: self.monitor.clone(),
-                scheduler: self.scheduler.clone(),
-            };
-            tls_executor_data.with(|t| {
-                let mut tls = t.borrow_mut();
-                tls.id = self.id;
-                tls.state = ExecutorState::Running;
-                tls.notifier = ExecutorDataField::Notifier(Arc::new(notifier));
-            });
-            // mirror the tls value
-            let mut state = ExecutorState::Running;
-            
-            // pull out some commonly used stuff
-            let mut stealers = self.build_stealers();
-            log::debug!(
-                "executor {} running with {} stealers",
-                &self.id,
-                &stealers.len()
-            );
+            self.setup();
             let mut stats = ExecutorStats::default();
             stats.id = self.id;
             let mut last_stats_time = std::time::Instant::now();
@@ -159,84 +147,14 @@ impl ThreadData {
                         .unwrap();
                     last_stats_time = std::time::Instant::now();
                 }
-                // processs any received commands
-                match &self.receiver.try_recv() {
-                    Ok(SchedCmd::Terminate(_)) => break,
-                    // don't rebuild if dead
-                    Ok(SchedCmd::RebuildStealers) if state == ExecutorState::Running => {
-                        stealers = self.build_stealers();
-                        log::debug!(
-                            "executor {} rebuild stealers, running with {} stealers",
-                            &self.id,
-                            &stealers.len()
-                        );
-                    }
-                    // ignore rebuilds when not running
-                    Ok(SchedCmd::RebuildStealers) => (),
-                    Ok(_) => log::warn!("executor received unexpected message"),
-                    Err(crossbeam::TryRecvError::Disconnected) => break,
-                    Err(_) => (),
-                }
+                // processs any received commands, break out of loop if told to terminate
+                if self.try_recv() { break }
                 // move blocked senders along...
-                tls_executor_data.with(|t| {
-                    let mut tls = t.borrow_mut();
-                    // if there's been a change in state report and mirror it
-                    if tls.state != state {
-                        log::warn!("executor {} state: {:#?}", tls.id, tls.state);
-                        state = tls.state;
-                    }
-                    if !tls.blocked_senders.is_empty() {
-                        let len = tls.blocked_senders.len();
-                        if len > stats.max_blocked_senders {
-                            stats.max_blocked_senders = len;
-                        }
-                        stats.blocked_senders += (len - tls.last_blocked_send_len) as u128;
-                        let mut still_blocked: Vec<SharedCollectiveSenderAdapter> =
-                            Vec::with_capacity(tls.blocked_senders.len());
-                        for mut sender in tls.blocked_senders.drain(..) {
-                            match sender.try_send() {
-                                Ok(()) => {
-                                    self.scheduler
-                                        .send(SchedCmd::RecvBlock(sender.get_id()))
-                                        .unwrap();
-                                }
-                                Err(TrySendError::Disconnected) => {}
-                                Err(TrySendError::Full) => {
-                                    still_blocked.push(sender);
-                                }
-                            };
-                        }
-                        tls.blocked_senders = still_blocked;
-                        tls.last_blocked_send_len = tls.blocked_senders.len();
-                    }
-                });
-                // get a task, which represents an instruction to be received
-                // by a machine.
-                if state == ExecutorState::Running {
-                    if let Some(task) = find_task(&self.work, &self.run_queue, &stealers) {
-                        let t = std::time::Instant::now();
-                        let mut machine = task.machine;
-                        tls_executor_data.with(|t| {
-                            let mut tls = t.borrow_mut();
-                            tls.machine_id = machine.id;
-                            tls.machine_state = machine.state.clone();
-                        });
-                        machine.receive_cmd( time_slice, &mut stats);
-                        stats.recv_time += t.elapsed();
-                        self.reschedule(&machine);
-                        tls_executor_data.with(|t| {
-                            let tls = t.borrow();
-                            if tls.state == ExecutorState::Parked {
-                                state = tls.state;
-                                log::debug!("parked executor {} completed", self.id);
-                            }
-                        });    
-                    } else {
-                        std::thread::yield_now();
-                    }
-                }
-                // if not running and we don't have any blocked senders, we can leave
-                if state == ExecutorState::Parked {
+                self.try_completing_send(&mut stats);
+                // try to run a task
+                self.run_task(time_slice, &mut stats);
+                // if no longer running and we don't have any blocked senders, we can leave
+                if self.get_state() == ExecutorState::Parked {
                     let is_empty = tls_executor_data.with(|t| {
                         let tls = t.borrow();
                         tls.blocked_senders.is_empty()
@@ -249,7 +167,7 @@ impl ThreadData {
             tls_executor_data.with(|t| {
                 let tls = t.borrow_mut();
                 if !tls.blocked_senders.is_empty() {
-                    log::info!(
+                    log::warn!(
                         "executor {} exited, but continues to have {} blocked senders",
                         self.id,
                         tls.blocked_senders.len()
@@ -262,6 +180,105 @@ impl ThreadData {
             }
         });
         Some(thread)
+    }
+
+    #[inline]
+    // get the executor state
+    fn get_state(&self) -> ExecutorState {
+        self.shared_info.lock().unwrap().get_state()
+    }
+
+    // one time setup
+    fn setup(&mut self) {
+        // setup TLS, to be use when blocking
+        let notifier = Notifier {
+            monitor: self.monitor.clone(),
+            scheduler: self.scheduler.clone(),
+        };
+        tls_executor_data.with(|t| {
+            let mut tls = t.borrow_mut();
+            tls.id = self.id;
+            tls.shared_info = Arc::clone(&self.shared_info);
+            tls.notifier = ExecutorDataField::Notifier(Arc::new(notifier));
+        });            
+        // pull out some commonly used stuff
+        self.stealers = self.build_stealers();
+        log::debug!("executor {} running with {} stealers", self.id, self.stealers.len());
+        self.shared_info.lock().as_mut().unwrap().set_state(ExecutorState::Running);
+    }
+
+    // check the channel, return true to quit.
+    fn try_recv(&mut self) -> bool {
+        let mut should_terminate = false;
+        match self.receiver.try_recv() {
+            Ok(SchedCmd::Terminate(_)) => should_terminate = true,
+            // rebuild if we're running
+            Ok(SchedCmd::RebuildStealers) if self.get_state() == ExecutorState::Running => {
+                self.stealers = self.build_stealers();
+                log::debug!("executor {} rebuild stealers, running with {} stealers", self.id, self.stealers.len());
+            },
+            // ignore rebuilds when not running
+            Ok(SchedCmd::RebuildStealers) => (),
+            Ok(_) => log::warn!("executor received unexpected message"),
+            Err(crossbeam::TryRecvError::Disconnected) => should_terminate = true,
+            Err(_) => (),
+        };
+        should_terminate
+    }
+
+    fn try_completing_send(&mut self, stats: &mut ExecutorStats) {
+        tls_executor_data.with(|t| {
+            let mut tls = t.borrow_mut();
+            if !tls.blocked_senders.is_empty() {
+                let len = tls.blocked_senders.len();
+                if len > stats.max_blocked_senders {
+                    stats.max_blocked_senders = len;
+                }
+                stats.blocked_senders += (len - tls.last_blocked_send_len) as u128;
+                let mut still_blocked: Vec<SharedCollectiveSenderAdapter> =
+                    Vec::with_capacity(tls.blocked_senders.len());
+                for mut sender in tls.blocked_senders.drain(..) {
+                    match sender.try_send() {
+                        Ok(()) => {
+                            self.scheduler
+                                .send(SchedCmd::RecvBlock(sender.get_id()))
+                                .unwrap();
+                        }
+                        Err(TrySendError::Disconnected) => {}
+                        Err(TrySendError::Full) => {
+                            still_blocked.push(sender);
+                        }
+                    };
+                }
+                tls.blocked_senders = still_blocked;
+                tls.last_blocked_send_len = tls.blocked_senders.len();
+            }
+        });
+    }
+
+    // if we're stull running, run get a task and run it. If no tasks, yeild
+    fn run_task(&mut self, time_slice: Duration, stats: &mut ExecutorStats) {
+        if self.get_state() == ExecutorState::Running {
+            if let Some(task) = find_task(&self.work, &self.run_queue, &self.stealers) {
+                let t = self.shared_info.lock().as_mut().unwrap().set_idle();
+                // setup TLS in case we have to park
+                let mut machine = task.machine;
+                tls_executor_data.with(|t| {
+                    let mut tls = t.borrow_mut();
+                    tls.machine_id = machine.id;
+                    tls.machine_state = machine.state.clone();
+                });
+                machine.receive_cmd( time_slice, stats);
+                stats.recv_time += t.elapsed();
+                self.shared_info.lock().as_mut().unwrap().set_idle();
+                self.reschedule(&machine);
+                if self.shared_info.lock().unwrap().get_state() == ExecutorState::Parked {
+                    log::debug!("parked executor {} completed", self.id);
+                }
+            } else {
+                std::thread::yield_now();
+            }
+        }
     }
 
     #[inline]
@@ -281,6 +298,13 @@ struct Worker {
     sender: SchedSender,
     stealer: Arc<deque::Stealer<Task>>,
     thread: Option<std::thread::JoinHandle<()>>,
+    // shared with the thread
+    shared_info: Arc<Mutex<SharedExecutorInfo>>,
+}
+impl Worker {
+    fn get_state_and_elapsed(&self) -> (ExecutorState, Duration) {
+        self.shared_info.lock().unwrap().get_state_and_elapsed()
+    }
 }
 type Id = usize;
 type Workers = Arc<RwLock<HashMap<Id, Worker>>>;
@@ -374,18 +398,28 @@ impl Executor {
     fn parked_executor(&self, id: usize) {
         // protect ourself from re-entry
         let _guard = self.barrier.lock().unwrap();
-        let parked_worker = self.workers.write().unwrap().remove(&id);
-        if let Some(worker) = parked_worker {
+        // dump state of all workers
+        self.workers.read().unwrap().iter().for_each(|(_,v)| {
+            let (state, elapsed) = v.get_state_and_elapsed();
+            log::debug!("worker {} {:#?} {:#?}", v.id, state, elapsed )
+        });
+
+        if let Some(worker) = self.workers.read().unwrap().get(&id) {
             // at this point the worker thread won't load tasks into local queue, so drain it
+            let mut count = 0;
             loop {
                 match worker.stealer.steal() {
                     deque::Steal::Empty => break,
                     deque::Steal::Retry => (),
-                    deque::Steal::Success(task) => self.run_queue.push(task),
+                    deque::Steal::Success(task) => { count += 1; self.run_queue.push(task) },
                 }
             }
-            // save the worker, otherwise it will get dropped, leaving the parked
-            // thread unjoinable
+            log::debug!("stole back {} tasks queue is_empty() = {}", count, self.run_queue.is_empty());
+        }
+
+        if let Some(worker) = self.workers.write().unwrap().remove(&id) {
+            // the executor will self-terminate
+            // save the worker, otherwise it gets dropped things go wrong with join
             self.parked_workers.write().unwrap().insert(id, worker);
             let dead_count = self.parked_workers.read().unwrap().len();
             self.stats.lock().unwrap().remove_worker(dead_count);
@@ -435,6 +469,7 @@ impl Executor {
             sender,
             stealer,
             thread: None,
+            shared_info: Arc::new(Mutex::new(SharedExecutorInfo::default())),
         };
         let data = ThreadData {
             id,
@@ -445,6 +480,8 @@ impl Executor {
             wait_queue: Arc::clone(&self.wait_queue),
             work,
             workers: Arc::clone(&self.workers),
+            stealers: Vec::with_capacity(8),
+            shared_info: Arc::clone(&worker.shared_info),
         };
         (worker, data)
     }

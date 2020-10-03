@@ -1,4 +1,7 @@
 use super::*;
+use crossbeam::{TrySendError, SendError, SendTimeoutError};
+use self::{connection::*};
+
 
 ///
 /// Wrap the crossbeam sender to allow the executor to handle a block.

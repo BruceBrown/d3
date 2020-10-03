@@ -1,8 +1,6 @@
 use super::*;
+use self::{connection::*, receiver::*, sender::*};
 
-use crate::connection::Connection;
-use crate::receiver::wrap_receiver;
-use crate::sender::wrap_sender;
 
 static CHANNEL_ID: AtomicUsize = AtomicUsize::new(1);
 

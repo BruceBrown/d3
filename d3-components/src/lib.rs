@@ -10,8 +10,9 @@ use atomic_refcell::AtomicRefCell;
 use crossbeam::atomic::AtomicCell;
 
 #[allow(unused_imports)]
-use d3_lib::executor;
-use d3_lib::machine_impl::*;
+use d3_core::executor::*;
+use d3_core::machine_impl::*;
+use d3_derive::*;
 
 mod net_instruction_set;
 use net_instruction_set::{NetSender, NetCmd};

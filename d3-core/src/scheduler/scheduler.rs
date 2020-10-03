@@ -1,4 +1,6 @@
 use super::*;
+use self::traits::*;
+
 use crossbeam::{TryRecvError, RecvError, ReadyTimeoutError};
 
 // The scheduler is responsible for accepting machines and waiting

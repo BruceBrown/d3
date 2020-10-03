@@ -17,7 +17,9 @@ atomic_refcell = "0.1.6"
 log = "0.4.11"
 simplelog = "0.8.0"
 
-d3-lib = {version = "0.1.0", path = "./d3-lib"}
+
+d3-core = {version = "0.1.0", path = "./d3-core"}
 d3-components =  {version = "0.1.0", path = "./d3-components"}
 echo-server = {version = "0.1.0", path = "./echo-server"}
 chat-server = {version = "0.1.0", path = "./chat-server"}
+d3-dev-instruction-sets = {version = "0.1.0", path = "./d3-dev-instruction-sets"}

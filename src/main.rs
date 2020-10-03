@@ -12,7 +12,7 @@ use std::error::Error;
 
 use std::str::FromStr;
 
-use d3_lib::executor;
+use d3_core::executor;
 use d3_components::network;
 use d3_components::settings;
 use d3_components::components::ComponentCmd;
