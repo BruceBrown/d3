@@ -34,19 +34,22 @@ SelectStats {
     selected_count: 282208,
 }
 '''
-After some unsuspecting changes, we're donw to this:
+After some unanticipated changes, we're down to this:
 SchedStats {
-    maint_time: 1.333007ms,
-    new_time: 677.406µs,
-    rebuild_time: 2.41147ms,
-    resched_time: 11.907933ms,
-    select_time: 25.676306ms,
-    total_time: 6.402703662s,
-    empty_select: 5,
-    selected_count: 121486,
+    maint_time: 1.35025ms,
+    new_time: 718.918µs,
+    rebuild_time: 336.844µs,
+    resched_time: 1.36715ms,
+    select_time: 24.69267ms,
+    total_time: 5.967185104s,
+    empty_select: 38,
+    selected_count: 50197,
+    primary_select_count: 4122,
+    slow_select_count: 4004,
+    fast_select_count: 42071,
 }
 '''
-As it turns out there were a few suprises. The select loop, in an effort to be fair, seldom selected the primary receiver, which is where the executor threads send machines back to be waited upon. Consequently, there was some starvation. Fixing that proved to be interesting while I've got a working fix, it needs a bit more refining. One of the ramifications is that select is no lnger for a fixed period of time, its for something less than 20ms depending upon how old the queued primary messages are. The goal being to balance between starvation and too often rebuilding the select table, which requires an examination of every machine's state. This brings up the question: Should there be a fast-queue for machines that seem to be hot vs machines which are cold. The idea being that if you could endd up with a better balance of select and not have to rebuild as often, its a bit of a pain due to haveing to track which machines are on the cold select and which are on the hot select. 
+As it turns out there were a few suprises. The select loop, in an effort to be fair, seldom selected the primary receiver, which is where the executor threads send machines back to be waited upon. Consequently, there was some starvation. Fixing that meant completing the suppor for a wait_queue, which is now done. Much of the low-level schedule consists of a select, a packaging of a task, sending it to the executor and waiting for it to be returned, where it is added to the select list. That exposed the next bottleneck, where a layer above has to interface with rebuidling the select. To remedy that, there's now a secondary select list built by the selector.
 
 ## Reorganized d3-lib into d3-core
 Now that things are a bit more stable, `d3-lib`, which is built as a set of libraries, needs some help. Its a bit pointless to have the netsted library structure, as you need it all for things to work. So, things that were previously libraries under `d3-lib` are now just folders under `d3-core/src`. That rippled some changes upward,
