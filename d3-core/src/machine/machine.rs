@@ -30,9 +30,6 @@ pub trait MachineImpl: 'static + Send + Sync {
     type SenderAdapter;
     type InstructionSet: Send + Sync;
 
-    /// A form of send barrier, when it returns the send can be attempted
-    fn block_or_continue();
-
     /// Park a sender. If the sender can't be parked, the instruction
     /// is returned.
     fn park_sender(

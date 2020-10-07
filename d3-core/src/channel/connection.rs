@@ -1,6 +1,6 @@
 use super::*;
 
-/// The Connection provides a weak refernce between the sender and receiver.
+/// The Connection provides a weak link between the sender and receiver.
 /// The value of which is dubious. It may provide some feedback mechanisms.
 /// It may also provide some insights into a live system to graph the data
 /// flow.

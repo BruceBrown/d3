@@ -14,7 +14,7 @@ const WORKER_MESSAGE_QUEUE_COUNT: usize = 10;
 pub struct SystemExecutorFactory {
     workers: RefCell<usize>,
     run_queue: TaskInjector,
-    wait_queue: TaskInjector,
+    wait_queue: SchedTaskInjector,
 }
 impl SystemExecutorFactory {
     // expose the factory as a trait object.
@@ -23,7 +23,7 @@ impl SystemExecutorFactory {
         Arc::new(Self {
             workers: RefCell::new(4),
             run_queue: Arc::new(deque::Injector::<Task>::new()),
-            wait_queue: Arc::new(deque::Injector::<Task>::new()),
+            wait_queue: Arc::new(deque::Injector::<SchedTask>::new()),
         })
     }
 }
@@ -35,7 +35,7 @@ impl ExecutorFactory for SystemExecutorFactory {
         self.workers.replace(workers);
     }
     // get thread run_queue, wait_queue
-    fn get_queues(&self) -> (TaskInjector, TaskInjector) {
+    fn get_queues(&self) -> (TaskInjector, SchedTaskInjector) {
         (Arc::clone(&self.run_queue), Arc::clone(&self.wait_queue))
     }
     // start the executor
@@ -69,13 +69,12 @@ fn find_task<T>(
     })
 }
 
-/// the model for a task injector
-pub type TaskInjector = Arc<deque::Injector<Task>>;
 
 /// The notifier
 struct Notifier {
     monitor: MonitorSender,
     scheduler: SchedSender,
+    wait_queue: SchedTaskInjector,
 }
 impl ExecutorNotifier for Notifier {
     fn notify_parked(&self, executor_id: usize) {
@@ -83,10 +82,8 @@ impl ExecutorNotifier for Notifier {
             .send(MonitorMessage::Parked(executor_id))
             .is_err(){};
     }
-    fn notify_can_schedule(&self, machine_id: u128) {
-        if self.scheduler
-            .send(SchedCmd::RecvBlock(machine_id))
-            .is_err(){};
+    fn notify_can_schedule(&self, machine_key: usize) {
+        self.wait_queue.push(SchedTask::new(machine_key));
     }
 }
 
@@ -105,7 +102,7 @@ struct ThreadData {
     scheduler: SchedSender,
     workers: Workers,
     run_queue: Arc<deque::Injector<Task>>,
-    wait_queue: Arc<deque::Injector<Task>>,
+    wait_queue: Arc<deque::Injector<SchedTask>>,
     work: deque::Worker<Task>,
     stealers: Stealers,
     shared_info: Arc<Mutex<SharedExecutorInfo>>,
@@ -194,6 +191,7 @@ impl ThreadData {
         let notifier = Notifier {
             monitor: self.monitor.clone(),
             scheduler: self.scheduler.clone(),
+            wait_queue: Arc::clone(&self.wait_queue),
         };
         tls_executor_data.with(|t| {
             let mut tls = t.borrow_mut();
@@ -240,14 +238,12 @@ impl ThreadData {
                 for mut sender in tls.blocked_senders.drain(..) {
                     match sender.try_send() {
                         Ok(()) => {
-                            self.scheduler
-                                .send(SchedCmd::RecvBlock(sender.get_id()))
-                                .unwrap();
-                        }
-                        Err(TrySendError::Disconnected) => {}
+                            self.wait_queue.push(SchedTask::new(sender.get_key()));
+                        },
+                        Err(TrySendError::Disconnected) => {},
                         Err(TrySendError::Full) => {
                             still_blocked.push(sender);
-                        }
+                        },
                     };
                 }
                 tls.blocked_senders = still_blocked;
@@ -260,18 +256,18 @@ impl ThreadData {
     fn run_task(&mut self, time_slice: Duration, stats: &mut ExecutorStats) {
         if self.get_state() == ExecutorState::Running {
             if let Some(task) = find_task(&self.work, &self.run_queue, &self.stealers) {
+                stats.time_on_queue += task.start.elapsed();
                 let t = self.shared_info.lock().as_mut().unwrap().set_idle();
                 // setup TLS in case we have to park
-                let mut machine = task.machine;
+                let machine = task.machine;
                 tls_executor_data.with(|t| {
                     let mut tls = t.borrow_mut();
-                    tls.machine_id = machine.id;
-                    tls.machine_state = machine.state.clone();
+                    tls.machine = ExecutorDataField::Machine(Arc::clone(&machine))
                 });
                 machine.receive_cmd( time_slice, stats);
                 stats.recv_time += t.elapsed();
                 self.shared_info.lock().as_mut().unwrap().set_idle();
-                self.reschedule(&machine);
+                self.reschedule(machine);
                 if self.shared_info.lock().unwrap().get_state() == ExecutorState::Parked {
                     log::debug!("parked executor {} completed", self.id);
                 }
@@ -282,10 +278,10 @@ impl ThreadData {
     }
 
     #[inline]
-    fn reschedule(&self, machine: &SharedCollectiveAdapter) {
+    fn reschedule(&self, machine: ShareableMachine) {
         let cmd = match machine.state.get() {
-            CollectiveState::Running => SchedCmd::RecvBlock(machine.id),
-            CollectiveState::Dead => SchedCmd::Remove(machine.id),
+            CollectiveState::Running => {self.wait_queue.push(SchedTask::new(machine.key)); return},
+            CollectiveState::Dead => SchedCmd::Remove(machine.key),
             _ => return
         };
         if self.scheduler.send(cmd).is_err() { log::info!("failed to send cmd to scheduler") }
@@ -355,7 +351,7 @@ struct Executor {
     scheduler: SchedSender,
     next_worker_id: AtomicUsize,
     run_queue: Injector,
-    wait_queue: Injector,
+    wait_queue: SchedTaskInjector,
     workers: Workers,
     parked_workers: Workers,
     barrier: Mutex<()>,
@@ -368,7 +364,7 @@ impl Executor {
         worker_count: usize,
         monitor: MonitorSender,
         scheduler: SchedSender,
-        queues: (TaskInjector, TaskInjector),
+        queues: (TaskInjector, SchedTaskInjector),
     ) -> Self {
         log::info!("Starting executor with {} executors", worker_count);
         let factory = Self {

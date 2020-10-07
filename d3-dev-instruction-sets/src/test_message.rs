@@ -2,7 +2,7 @@ use super::*;
 
 /// These are the event types which are exchanged for testing
 #[allow(dead_code)]
-#[derive(Debug, MachineImpl, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, MachineImpl)]
 pub enum TestMessage {
     Test,
     TestData(usize),
@@ -14,7 +14,7 @@ pub enum TestMessage {
 }
 
 /// Test structure for callback and exchange
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct TestStruct {
     pub from_id: usize,
     pub received_by: usize,

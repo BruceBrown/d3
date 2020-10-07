@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Copy, Clone, Debug, Eq, MachineImpl, PartialEq)]
+#[derive(Debug, MachineImpl)]
 #[allow(dead_code)]
 pub enum StateTable {
     Start,

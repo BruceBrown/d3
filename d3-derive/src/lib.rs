@@ -6,15 +6,17 @@ use syn::DeriveInput;
 
 /// #[derive(MachineImpl)]
 ///
-/// Tag an Enum that is it is an instruction set for machines. This ends
-/// up implementing a MachineImpl trait on the enum and a MachineAdapter
-/// trait on the ReceiverAdapater, which is the template for all machines.
+/// Add (MachineImpl) to and enum's derive list to generate the code
+/// necessary for transforming that enum into a set of directives for
+/// a machine. The resulting code implements a MachineImpl for that
+/// instruction set, along with several adapters to form the basis
+/// of a machine which can interact with other maachines.
 ///
 #[proc_macro_derive(MachineImpl)]
 pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
-    let adapter_ident = format_ident!("MachineAdapter{}", name.to_string());
+    let adapter_ident = format_ident!("MachineBuilder{}", name.to_string());
     let sender_adapter_ident = format_ident!("SenderAdapter{}", name.to_string());
     //let recv_wait_ident = format_ident!("RecvWait{}", name.to_string());
     let expanded = quote! {
@@ -22,16 +24,6 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             type Adapter = #adapter_ident;
             type SenderAdapter = #sender_adapter_ident;
             type InstructionSet = #name;
-            fn block_or_continue() {
-                tls_executor_data.with(|t|{
-                    let mut tls = t.borrow_mut();
-                    // main thread can always continue and block
-                    if tls.id == 0 { return }
-                    if tls.machine_state.get() != CollectiveState::Running {
-                        tls.recursive_block();
-                    }
-                });
-            }
             fn park_sender(channel_id: usize, sender: crossbeam::Sender<Self::InstructionSet>, instruction: Self::InstructionSet) -> Result<(),Self::InstructionSet> {
                 //Err(instruction)
                 tls_executor_data.with(|t|{
@@ -39,18 +31,22 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                     // if its the main thread, let it block.
                     if tls.id == 0 { Err(instruction) }
                     else {
-                        let adapter = #sender_adapter_ident {
-                            id: tls.machine_id,
-                            state: tls.machine_state.clone(),
-                            sender: sender,
-                            instruction: Some(instruction),
-                        };
-                        let shared_adapter = SharedCollectiveSenderAdapter {
-                            id: tls.machine_id,
-                            state: tls.machine_state.clone(),
-                            normalized_adapter: Box::new(adapter),
-                        };
-                        tls.sender_blocked(channel_id, shared_adapter);
+                        if let ExecutorDataField::Machine(machine) = &tls.machine {
+                           let adapter = #sender_adapter_ident {
+                                id: machine.get_id(),
+                                key: machine.get_key(),
+                                state: machine.state.clone(),
+                                sender: sender,
+                                instruction: Some(instruction),
+                            };
+                            let shared_adapter = SharedCollectiveSenderAdapter {
+                                id: adapter.id,
+                                key: adapter.key,
+                                state: adapter.state.clone(),
+                                normalized_adapter: Box::new(adapter),
+                            };
+                            tls.sender_blocked(channel_id, shared_adapter);
+                        }
                         Ok(())
                     }
                 })
@@ -58,59 +54,59 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         }
 
         // This is the instruction set dependent machine, we've forgone generic <T>
-        // as it becomes unwieldy when it comes to scheduling and execution.
+        // as it becomes unwieldy when it comes to scheduling and execution. For the
+        // most part it is immutable, with the only exception being the instruction,
+        // which unfortunately has to travel between threads. We don't want to recreate
+        // this for each instruction sent, so we're going to wrap the instruction
+        // with Arc<Mutex> to allow inner access, kinda sucks cuz the lifecycle is
+        // such that there is only one owner at a time. Let's see if Arc<> is good enough
         pub struct #adapter_ident {
             pub machine: Arc<dyn Machine<#name>>,
             pub receiver: Receiver<#name>,
-            pub instruction: Option<#name>,
+            pub instruction: crossbeam::atomic::AtomicCell<Option<#name>>,
         }
-
+        impl #adapter_ident {
+            fn set_instruction(&self, inst: Option<#name>) {
+                self.instruction.store(inst);
+            }
+            fn take_instruction(&self) -> Option<#name> {
+                self.instruction.take()
+            }
+        }
+        impl std::fmt::Debug for #adapter_ident {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "#adapter_ident {{ .. }}")
+            }        
+        }
         // This is the generic adapter implementation for the adapter, much of this is
         // already generic, so maybe there's an alternative where the dyn stuff can
         // be used less often.
         //
-        impl CollectiveAdapter for #adapter_ident {
+        impl MachineDependentAdapter for #adapter_ident {
             fn sel_recv<'b>(&'b self, sel: &mut crossbeam::Select<'b>) -> usize {
                 sel.recv(&self.receiver.receiver)
             }
-            fn try_recv_task(&self, machine: &SharedCollectiveAdapter) -> Option<Task> {
+            fn try_recv_task(&self, machine: &ShareableMachine) -> Option<Task> {
                 match self.receiver.receiver.try_recv() {
                     Err(crossbeam::TryRecvError::Empty) => None,
                     Err(crossbeam::TryRecvError::Disconnected) => {
                         machine.state.set(CollectiveState::Disconnected);
-                        let adapter = Self {
-                            machine: self.machine.clone(),
-                            receiver: self.receiver.clone(),
-                            instruction: None,
-                        };
-                        let task_adapter = SharedCollectiveAdapter {
-                            id: machine.id,
-                            state: machine.state.clone(),
-                            normalized_adapter: Box::new(adapter) as CommonCollectiveAdapter
-                        };
-                        let task = Task{machine: task_adapter };
+                        let task_adapter = Arc::clone(machine);
+                        let task = Task{start: std::time::Instant::now(), machine: task_adapter };
                         Some(task)
                     }
                     Ok(instruction) => {
                         machine.state.set(CollectiveState::Ready);
-                        // find a way to clone and assign command..
-                        let adapter = Self {
-                            machine: self.machine.clone(),
-                            receiver: self.receiver.clone(),
-                            instruction: Some(instruction),
-                        };
-                        let task_adapter = SharedCollectiveAdapter {
-                            id: machine.id,
-                            state: machine.state.clone(),
-                            normalized_adapter: Box::new(adapter) as CommonCollectiveAdapter
-                        };
-                        let task = Task{machine: task_adapter };
+                        let task_adapter = Arc::clone(machine);
+                        self.set_instruction(Some(instruction));
+                        let task = Task{start: std::time::Instant::now(), machine: task_adapter };
                         Some(task)
                     }
                 }
             }
-            fn receive_cmd(&mut self, state: &MachineState, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
+            fn receive_cmd(&self, state: &MachineState, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
                 if state.get() == CollectiveState::Disconnected {
+                    state.set(CollectiveState::Running);
                     self.machine.disconnected();
                     state.set(CollectiveState::Dead);
                     return
@@ -118,7 +114,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 state.set(CollectiveState::Running);
                 // while we're running, might as well try to drain the queue, but keep it bounded
                 let start = std::time::Instant::now();
-                let mut cmd = self.instruction.take().unwrap();
+                let mut cmd = self.take_instruction().unwrap();
                 stats.tasks_executed += 1;
                 loop {
                     self.machine.receive(cmd);
@@ -142,7 +138,8 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         }
 
         pub struct #sender_adapter_ident {
-            pub id: u128,
+            pub id: uuid::Uuid,
+            pub key: usize,
             pub state: MachineState,
             pub sender: crossbeam::Sender<#name>,
             pub instruction: Option<#name>,
@@ -169,7 +166,8 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         }
 
         impl CollectiveSenderAdapter for #sender_adapter_ident {
-            fn get_id(&self) -> u128 { self.id }
+            fn get_id(&self) -> uuid::Uuid { self.id }
+            fn get_key(&self) -> usize { self.key }
             fn try_send(&mut self) -> Result<(), TrySendError> {
                 match self.try_send() {
                     Err(e) => Err(e),
@@ -181,12 +179,12 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl MachineAdapter for #adapter_ident {
+        impl MachineBuilder for #adapter_ident {
             type InstructionSet = #name;
 
             /// Consume a raw machine, using it to create a machine that is usable by
             /// the framework.
-            fn build_raw<T>(raw: T, channel_capacity: usize) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, SharedCollectiveAdapter)
+            fn build_raw<T>(raw: T, channel_capacity: usize) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -194,7 +192,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_common(raw, sender, receiver)
             }
 
-            fn build_addition<T>(machine: &Arc<Mutex<T>>, channel_capacity: usize) -> (Sender<Self::InstructionSet>, SharedCollectiveAdapter)
+            fn build_addition<T>(machine: &Arc<Mutex<T>>, channel_capacity: usize) -> (Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -202,7 +200,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_addition_common(machine, sender, receiver)
             }
 
-            fn build_unbounded<T>(raw: T) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, SharedCollectiveAdapter)
+            fn build_unbounded<T>(raw: T) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -210,7 +208,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_common(raw, sender, receiver)
             }
 
-            fn build_addition_unbounded<T>(machine: &Arc<Mutex<T>>) -> (Sender<Self::InstructionSet>, SharedCollectiveAdapter)
+            fn build_addition_unbounded<T>(machine: &Arc<Mutex<T>>) -> (Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -218,48 +216,36 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_addition_common(machine, sender, receiver)
             }
 
-            fn build_common<T>(raw: T, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, SharedCollectiveAdapter )
+            fn build_common<T>(raw: T, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter )
                 where T: 'static + Machine<Self::InstructionSet>
             {
                  // wrap it
                  let instance: Arc<Mutex<T>> = Arc::new(Mutex::new(raw));
                  // clone it, making it look like a machine, Machine for Mutex<T> facilitates this
                  let machine = Arc::clone(&instance) as Arc<dyn Machine<Self::InstructionSet>>;
-                 // get the id
-                 let id = COLLECTIVE_ID.fetch_add(1) as u128;
                  // wrap the machine dependent bits
                  let adapter = Self {
                      machine, receiver,
-                     instruction: None,
+                     instruction: crossbeam::atomic::AtomicCell::new(None),
                  };
                  // wrap the independent and normalize the dependent with a trait object
-                 let shared_adapter = SharedCollectiveAdapter {
-                     id: id,
-                     state: MachineState::default(),
-                     normalized_adapter: CommonCollectiveAdapter::from(adapter),
-                 };
-                 (instance, sender, shared_adapter)
+                 let machine_adapter = MachineAdapter::new(Box::new(adapter));
+                 (instance, sender, machine_adapter)
             }
 
-            fn build_addition_common<T>(machine: &Arc<Mutex<T>>, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Sender<Self::InstructionSet>, SharedCollectiveAdapter )
+            fn build_addition_common<T>(machine: &Arc<Mutex<T>>, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Sender<Self::InstructionSet>, MachineAdapter )
                 where T: 'static + Machine<Self::InstructionSet>
             {
                  // clone it, making it look like a machine, Machine for Mutex<T> facilitates this
                  let machine = Arc::clone(machine) as Arc<dyn Machine<Self::InstructionSet>>;
-                 // get the id
-                 let id = COLLECTIVE_ID.fetch_add(1) as u128;
                  // wrap the machine dependent bits
                  let adapter = Self {
                      machine, receiver,
-                     instruction: None,
+                     instruction: crossbeam::atomic::AtomicCell::new(None),
                  };
                  // wrap the independent and normalize the dependent with a trait object
-                 let shared_adapter = SharedCollectiveAdapter {
-                     id: id,
-                     state: MachineState::default(),
-                     normalized_adapter: CommonCollectiveAdapter::from(adapter),
-                 };
-                 (sender, shared_adapter)
+                 let machine_adapter = MachineAdapter::new(Box::new(adapter));
+                 (sender, machine_adapter)
             }
         }
 
@@ -267,11 +253,13 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         // from that into a trait object that can be shared via From. Doing
         // it here, rather than in build allows for some changes in design
         // down the road.
+        /*
         impl From<#adapter_ident> for CommonCollectiveAdapter {
             fn from(adapter: #adapter_ident) -> Self {
-                std::boxed::Box::new(adapter) as CommonCollectiveAdapter
+                std::sync::Arc::new(adapter) as CommonCollectiveAdapter
             }
         }
+        */
     };
     TokenStream::from(expanded)
 }

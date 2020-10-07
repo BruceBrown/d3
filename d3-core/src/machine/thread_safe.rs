@@ -9,17 +9,28 @@ use crossbeam::atomic::AtomicCell;
 pub struct SharedProtectedObject<T> {
     object: Arc<AtomicCell<T>>,
 }
+impl<T> fmt::Debug for SharedProtectedObject<T>
+where T: std::fmt::Debug + Copy
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#?}", &self.object.load())
+    }
+}
+
 #[allow(dead_code)]
 impl<T> SharedProtectedObject<T>
 where
     T: Copy + Eq,
 {
+    #[inline]
     pub fn get(&self) -> T {
         self.object.load()
     }
+    #[inline]
     pub fn set(&self, new: T) {
         self.object.store(new)
     }
+    #[inline]
     pub fn compare_and_set(&self, current: T, new: T) -> T {
         self.object.compare_and_swap(current, new)
     }

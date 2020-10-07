@@ -22,18 +22,18 @@ pub fn connect<T, P>(
     machine: T,
 ) -> (
     Arc<Mutex<T>>,
-    Sender<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
 )
 where
     T: 'static
         + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
-    <P as MachineImpl>::Adapter: MachineAdapter,
+    <P as MachineImpl>::Adapter: MachineBuilder,
 {
     let channel_max = default_channel_max.load();
     let (machine, sender, collective_adapter) =
-        <<P as MachineImpl>::Adapter as MachineAdapter>::build_raw(machine, channel_max);
+        <<P as MachineImpl>::Adapter as MachineBuilder>::build_raw(machine, channel_max);
     Server::assign_machine(collective_adapter);
     (machine, sender)
 }
@@ -42,17 +42,17 @@ where
 pub fn and_connect<T, P>(
     machine: &Arc<Mutex<T>>,
 ) -> 
-    Sender<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>
+    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 where
     T: 'static
         + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
-    <P as MachineImpl>::Adapter: MachineAdapter,
+    <P as MachineImpl>::Adapter: MachineBuilder,
 {
     let channel_max = default_channel_max.load();
     let (sender, collective_adapter) =
-        <<P as MachineImpl>::Adapter as MachineAdapter>::build_addition(machine, channel_max);
+        <<P as MachineImpl>::Adapter as MachineBuilder>::build_addition(machine, channel_max);
     Server::assign_machine(collective_adapter);
     sender
 }
@@ -65,17 +65,17 @@ pub fn connect_with_capacity<T, P>(
     capacity: usize,
 ) -> (
     Arc<Mutex<T>>,
-    Sender<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
 )
 where
     T: 'static
         + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
-    <P as MachineImpl>::Adapter: MachineAdapter,
+    <P as MachineImpl>::Adapter: MachineBuilder,
 {
     let (machine, sender, collective_adapter) =
-        <<P as MachineImpl>::Adapter as MachineAdapter>::build_raw(machine, capacity);
+        <<P as MachineImpl>::Adapter as MachineBuilder>::build_raw(machine, capacity);
     Server::assign_machine(collective_adapter);
     (machine, sender)
 }
@@ -87,17 +87,17 @@ pub fn and_connect_with_capacity<T, P>(
     capacity: usize,
 ) ->
     
-    Sender<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>
+    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 
 where
     T: 'static
         + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
-    <P as MachineImpl>::Adapter: MachineAdapter,
+    <P as MachineImpl>::Adapter: MachineBuilder,
 {
     let (sender, collective_adapter) =
-        <<P as MachineImpl>::Adapter as MachineAdapter>::build_addition(machine, capacity);
+        <<P as MachineImpl>::Adapter as MachineBuilder>::build_addition(machine, capacity);
     Server::assign_machine(collective_adapter);
     sender
 }
@@ -109,17 +109,17 @@ pub fn connect_unbounded<T, P>(
     machine: T,
 ) -> (
     Arc<Mutex<T>>,
-    Sender<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
 )
 where
     T: 'static
         + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
-    <P as MachineImpl>::Adapter: MachineAdapter,
+    <P as MachineImpl>::Adapter: MachineBuilder,
 {
     let (machine, sender, collective_adapter) =
-        <<P as MachineImpl>::Adapter as MachineAdapter>::build_unbounded(machine);
+        <<P as MachineImpl>::Adapter as MachineBuilder>::build_unbounded(machine);
     Server::assign_machine(collective_adapter);
     (machine, sender)
 }
@@ -130,17 +130,17 @@ where
 pub fn and_connect_unbounded<T, P>(
     machine: &Arc<Mutex<T>>,
 ) ->
-    Sender<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>
+    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 
 where
     T: 'static
         + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineAdapter>::InstructionSet>,
+        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
-    <P as MachineImpl>::Adapter: MachineAdapter,
+    <P as MachineImpl>::Adapter: MachineBuilder,
 {
     let (sender, collective_adapter) =
-        <<P as MachineImpl>::Adapter as MachineAdapter>::build_addition_unbounded(machine);
+        <<P as MachineImpl>::Adapter as MachineBuilder>::build_addition_unbounded(machine);
     Server::assign_machine(collective_adapter);
     sender
 }

@@ -1,4 +1,52 @@
 # d3 -- Revision History
+## Scheduler Reorg, Goal is to Halve the Time Spent in Scheduler
+Changed out u128 in Machine (and elsehwere for a Uuid). Added a key: usize to the machine, and elsewhere. The key is set when storing into the collective. Replaced HashMap with Slab for storing machines. Replaced HashMap with IndexMap for storing Select index to machine key mapping.
+
+Now for the testing. We're using the `daisy-chain` test with:
+'''
+timeout = 600
+machines = 4000
+messages = 400
+forwarding_multiplier = 1
+iterations = 10
+'''
+Prior to the changes the scheduler stats are:
+'''
+SelectStats {
+    new_time: 798.91µs,
+    rebuild_time: 2.520844ms,
+    resched_time: 81.277232ms,
+    select_time: 534.238318ms,
+    total_time: 14.484425832s,
+    empty_select: 4,
+    selected_count: 519806,
+}
+
+After replacing HashMap with Slab and IndexMap, replacing some Arc<> with Box<>, adding an Arc<> wrapper for storage, creating tasks, and storing to TLS, we're down to this:
+'''
+SelectStats {
+    new_time: 734.083µs,
+    rebuild_time: 1.034533ms,
+    resched_time: 13.506725ms,
+    select_time: 230.381141ms,
+    total_time: 9.752679423s,
+    empty_select: 6,
+    selected_count: 282208,
+}
+'''
+After some unsuspecting changes, we're donw to this:
+SchedStats {
+    maint_time: 1.333007ms,
+    new_time: 677.406µs,
+    rebuild_time: 2.41147ms,
+    resched_time: 11.907933ms,
+    select_time: 25.676306ms,
+    total_time: 6.402703662s,
+    empty_select: 5,
+    selected_count: 121486,
+}
+'''
+As it turns out there were a few suprises. The select loop, in an effort to be fair, seldom selected the primary receiver, which is where the executor threads send machines back to be waited upon. Consequently, there was some starvation. Fixing that proved to be interesting while I've got a working fix, it needs a bit more refining. One of the ramifications is that select is no lnger for a fixed period of time, its for something less than 20ms depending upon how old the queued primary messages are. The goal being to balance between starvation and too often rebuilding the select table, which requires an examination of every machine's state. This brings up the question: Should there be a fast-queue for machines that seem to be hot vs machines which are cold. The idea being that if you could endd up with a better balance of select and not have to rebuild as often, its a bit of a pain due to haveing to track which machines are on the cold select and which are on the hot select. 
 
 ## Reorganized d3-lib into d3-core
 Now that things are a bit more stable, `d3-lib`, which is built as a set of libraries, needs some help. Its a bit pointless to have the netsted library structure, as you need it all for things to work. So, things that were previously libraries under `d3-lib` are now just folders under `d3-core/src`. That rippled some changes upward,

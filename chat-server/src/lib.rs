@@ -5,6 +5,7 @@ extern crate crossbeam;
 
 use std::sync::{Arc, Mutex};
 use std::error::Error;
+use uuid::{self, Uuid};
 
 #[allow(unused_imports)]
 use d3_core::executor::{self};

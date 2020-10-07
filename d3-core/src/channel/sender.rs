@@ -7,10 +7,13 @@ use self::{connection::*};
 /// Wrap the crossbeam sender to allow the executor to handle a block.
 /// This requires that a send which would block, parks the send. It
 /// also requires that prior to sending a check is made to determine
-/// if the sender is already blocked. The one thing that makes this
-/// work is that the repeat send is bound to the executor. So,
-/// we can examine TLS data to see if we need to not complete the send.
+/// if the sender is already blocked. What makes this work is that the
+/// repeat send is bound to the executor. Consequently, TLS data can
+/// be inspected to determine if we need to not complete the send.
 ///
+/// Otherwise, the Sender is a wrapper aruond the Crossbeam sender. It
+/// intentionally limits the surface of the sender. Much of this
+/// is just boilerplate wrapping
 pub struct Sender<T: MachineImpl>
 {
     channel_id: usize,
@@ -36,7 +39,7 @@ where T: MachineImpl
         // this could be a series of sends from a machine, which is already
         // blocked. Need to check if that is the case, otherwise this send
         // could succeed and we'd be sending out of order.
-        <T as MachineImpl>::block_or_continue();
+        ExecutorData::block_or_continue();
         match self.sender.try_send(msg) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(instruction)) => {

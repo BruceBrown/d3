@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(MachineImpl, Clone, Debug)]
+#[derive(Debug, MachineImpl)]
 #[allow(dead_code)]
 pub enum Something {
     One,

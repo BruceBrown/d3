@@ -9,9 +9,11 @@ use std::iter;
 use std::fmt;
 use std::cell::RefCell;
 
+
 // bring in addition utilities
 use crossbeam::{atomic::AtomicCell};
 use atomic_refcell::AtomicRefCell;
+use uuid::Uuid;
 
 #[allow(unused_imports)]
 #[macro_use] extern crate smart_default;
@@ -30,11 +32,13 @@ mod tls {
     use super::*;
     use crate::machine::{thread_safe::*};
     pub mod tls_executor;
+    pub mod collective;
 }
 mod channel {
     #![allow(dead_code)]
     use super::*;
     use crate::machine::{machine::*};
+    use crate::tls::tls_executor::ExecutorData;
     pub mod channel;
     mod connection;
     pub mod receiver;
@@ -44,7 +48,7 @@ mod collective {
     #![allow(dead_code)]
     use super::*;
     use crate::machine::{machine::*};
-    use crate::tls::tls_executor::*;
+    use crate::tls::{tls_executor::*, collective::*};
     use crate::channel::{receiver::*, sender::*};
     pub mod collective;
     pub mod machine;
@@ -53,12 +57,13 @@ mod scheduler {
     #![allow(dead_code)]
     use super::*;
     use crate::machine::{machine::*};
-    use crate::tls::tls_executor::*;
+    use crate::tls::{tls_executor::*, collective::*};
     use crate::collective::{collective::*, machine::*};
     mod executor;
     pub mod machine;
     mod overwatch;
-    mod scheduler;
+    mod sched;
+    mod sched_factory;
     pub mod setup_teardown;
     mod traits;
 }
@@ -68,17 +73,20 @@ mod scheduler {
 // package up things needed for #[derive(MachineImpl)]
 pub mod machine_impl {
     pub use crate::channel::{channel::{channel, channel_with_capacity}, receiver::Receiver, sender::Sender};
-    pub use crate::collective::{ collective::{
-        CollectiveAdapter, CommonCollectiveAdapter, SharedCollectiveAdapter,
-        ExecutorStats, Task, COLLECTIVE_ID, get_time_slice
-    },
-        machine::MachineAdapter
+    pub use crate::collective::{ 
+        collective::{ get_time_slice },
+        machine::{ MachineBuilder }
+    };
+    pub use crate::tls::{ collective:: {
+        MachineDependentAdapter, ShareableMachine, MachineAdapter,
+        MachineState, CollectiveState,
+        },
+        tls_executor:: {
+            ExecutorDataField,
+            ExecutorStats, Task,TrySendError, tls_executor_data,CollectiveSenderAdapter, SharedCollectiveSenderAdapter
+        }
     };
     pub use crate::machine::{machine::Machine, machine::MachineImpl};
-    pub use crate::tls::{tls_executor::{
-        TrySendError, tls_executor_data, CollectiveState, MachineState,
-        CollectiveSenderAdapter, SharedCollectiveSenderAdapter
-    }};
 }
 
 // package up thing needed to tune and start the schduler and inject

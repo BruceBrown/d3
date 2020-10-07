@@ -1,30 +1,40 @@
 use super::*;
-
+use self::collective::*;
 ///
 /// This is the TLS data for the executor. It is used by the channel and the executor;
 /// Otherwise, this would be much higher in the stack.
-/// 
 
-///
-/// The state of the machine.
-/// All machines start New.
-/// A disconnected machine hasn't been told that its disconnected, onceit is its dead.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, SmartDefault)]
-#[allow(dead_code)]
-pub enum CollectiveState {
-    #[default]
-    New,
-    Waiting,
-    Ready,
-    Running,
-    SendBlock,
-    RecvBlock,
-    Disconnected,
-    Dead,
+/// A Task, actually a task for the executor
+pub struct Task {
+    pub start: Instant,
+    pub machine: ShareableMachine,
 }
 
-/// A thread-safe wrapped state, which can be cloned.
-pub type MachineState = SharedProtectedObject<CollectiveState>;
+/// A task for the scheduler, which will reschedule the machine
+pub struct SchedTask {
+    pub start: Instant,
+    pub machine_key: usize,
+}
+impl SchedTask {
+    pub fn new(machine_key: usize) -> Self {
+        Self { start: Instant::now(), machine_key }
+    }
+}
+
+/// Executor statistics.
+/// It lives here due to the ShareableMachine having it in a method signature
+#[derive(Copy,Clone,Debug, Default, Eq, PartialEq)]
+pub struct ExecutorStats {
+    pub id: usize,
+    pub tasks_executed: u128,
+    pub instructs_sent: u128,
+    pub blocked_senders: u128,
+    pub max_blocked_senders: usize,
+    pub exhausted_slice: u128,
+    pub recv_time: std::time::Duration,
+    pub time_on_queue: std::time::Duration,
+}
+
 
 ///
 /// The state of the executor
@@ -47,18 +57,21 @@ pub enum TrySendError {
     Disconnected,
 }
 
-/// Analogous the the SharedCollectiveAdapter, the SharedCollectiveSenderAdapter encapsulates
+/// Analogous the the ShareableMachine, the SharedCollectiveSenderAdapter encapsulates
 /// and adapter containing a wrapped CollectiveSenderAdapter, which encapsulates Sender<T> and T.
 pub struct SharedCollectiveSenderAdapter {
-    pub id: u128,
+    pub id: Uuid,
+    pub key: usize,
     pub state: MachineState,
     // the normalized_adapter is an ugly trait object, which needs fixing
     pub normalized_adapter: CommonCollectiveSenderAdapter,
 }
 impl SharedCollectiveSenderAdapter {
     /// Get the id of the sending machine
-    pub const fn get_id(&self) -> u128 { self.id }
-    /// Try to send the message
+    pub const fn get_id(&self) -> Uuid { self.id }
+    /// Get the key of the sending machine
+    pub fn get_key(&self) -> usize { self.key }
+     /// Try to send the message
     pub fn try_send(&mut self) -> Result<(), TrySendError> {
         self.normalized_adapter.try_send()
     }
@@ -66,7 +79,9 @@ impl SharedCollectiveSenderAdapter {
 
 pub trait CollectiveSenderAdapter {
     /// Get the id of the sending machine
-    fn get_id(&self) -> u128;
+    fn get_id(&self) -> Uuid;
+    /// Get the key of the sending machine
+    fn get_key(&self) -> usize;
     /// Try to send the message
     fn try_send(&mut self) -> Result<(), TrySendError>;
 }
@@ -95,6 +110,7 @@ impl Default for SharedExecutorInfo {
     fn default() -> Self { Self { state: ExecutorState::Init, start_idle: Instant::now( )}}
 }
 
+
 ///
 /// ExecutorData is TLS for the executor. Among other things, it provides bridging
 /// for the channel to allow a sender to park, while allowing the executor to continue
@@ -102,14 +118,25 @@ impl Default for SharedExecutorInfo {
 #[derive(Default)]
 pub struct ExecutorData {
     pub id: usize,
-    pub machine_id: u128,
-    pub machine_state: MachineState,
+    pub machine: ExecutorDataField,
     pub blocked_senders: Vec<SharedCollectiveSenderAdapter>,
     pub last_blocked_send_len: usize,
     pub notifier: ExecutorDataField,
     pub shared_info: Arc<Mutex<SharedExecutorInfo>>,
 }
 impl ExecutorData {
+    pub fn block_or_continue() {
+        tls_executor_data.with(|t|{
+            let mut tls = t.borrow_mut();
+            // main thread can always continue and block
+            if tls.id == 0 { return }
+            if let ExecutorDataField::Machine(machine) = &tls.machine {
+                if machine.state.get() != CollectiveState::Running {
+                    tls.recursive_block();
+                }   
+            }
+        });
+    }
     pub fn recursive_block(&mut self) {
         // we're called from a tls context, ExecutorData is for the current thread.
         // we've already queue'd the sender, and now its trying to send more. This
@@ -147,6 +174,10 @@ impl ExecutorData {
     fn drain(&mut self) {
         // all we can do at this point is attempt to drain out sender queue
         let backoff = crossbeam::utils::Backoff::new();
+        let (machine_key, machine_state) = match &self.machine {
+            ExecutorDataField::Machine(machine) => (machine.key, machine.state.clone()),
+            _ => panic!("machine field was not set prior to running"),
+        }; 
         while !self.blocked_senders.is_empty() {
             self.shared_info.lock().as_mut().unwrap().set_idle();
             let mut still_blocked: Vec::<SharedCollectiveSenderAdapter> = Vec::with_capacity(self.blocked_senders.len());
@@ -154,14 +185,14 @@ impl ExecutorData {
             for mut sender in self.blocked_senders.drain(..) {
                 match sender.try_send() {
                     // handle the blocked sender that got us here
-                    Ok(()) if sender.id == self.machine_id => {
+                    Ok(()) if sender.key == machine_key => {
                         backoff.reset();
-                        self.machine_state.set(CollectiveState::Running);
+                        machine_state.set(CollectiveState::Running);
                         handled_recursive_sender = true;
                     },
-                    Err(TrySendError::Disconnected) if sender.id == self.machine_id => {
+                    Err(TrySendError::Disconnected) if sender.key == machine_key => {
                         backoff.reset();
-                        self.machine_state.set(CollectiveState::Running);
+                        machine_state.set(CollectiveState::Running);
                         handled_recursive_sender = true;
                     },
                     // handle all others
@@ -169,7 +200,7 @@ impl ExecutorData {
                         backoff.reset(); 
                         // let the scheduler know that this machine can now be scheduled
                         match &self.notifier {
-                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.id),
+                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.key),
                             _ => log::error!("can't notify scheduler!!!"),
                         };
                     }
@@ -177,7 +208,7 @@ impl ExecutorData {
                         backoff.reset(); 
                         // let the scheduler know that this machine can now be scheduled
                         match &self.notifier {
-                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.id),
+                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.key),
                             _ => log::error!("can't notify scheduler!!!"),
                         }; 
                     },
@@ -203,12 +234,14 @@ impl ExecutorData {
     }
 }
 
-/// Encoding the notifier as a variant allows it to be stored in the TLS as a field.
+
+/// Encoding the structs as a variant allows it to be stored in the TLS as a field.
 #[derive(SmartDefault)]
 pub enum ExecutorDataField {
     #[default]
     Uninitialized,
     Notifier(ExecutorNotifierObj),
+    Machine(ShareableMachine),
 }
 
 /// The trait that allows the executor to perform notifications
@@ -216,7 +249,7 @@ pub trait ExecutorNotifier: Send + Sync + 'static {
     /// Send a notificiation that the executor is parked
     fn notify_parked(&self, executor_id: usize);
     /// Send a notification that a parked sender is no long parked, and can be scheduled
-    fn notify_can_schedule(&self, machine_id: u128);
+    fn notify_can_schedule(&self, machine_key: usize);
 }
 pub type ExecutorNotifierObj = std::sync::Arc<dyn ExecutorNotifier>;
 

@@ -2,8 +2,10 @@ use super::*;
 use crossbeam::{TryRecvError, RecvError, RecvTimeoutError};
 use self::{connection::*};
 
-/// Wrap the crossbeam::Sender so that we warn on block, In the future we might
-/// park and continue later.Receiver
+///
+/// The Receiver is a wrapper aruond the Crossbeam receiver. It
+/// intentionally limits the surface of the receiver. Much of this
+/// is just boilerplate wrapping
 pub struct Receiver<T>
 where T: MachineImpl
 {
@@ -102,14 +104,3 @@ where T: MachineImpl
         receiver,
     }
 }
-/*
-impl<T> ChannelHandle for Receiver<T>
-where T: MachineImpl + Clone
-{
-    fn add_select<'a,'b>(&'a self, select: &mut crossbeam::Select<'b>) -> usize
-    where 'a: 'b,
-    {
-        select.recv(&self.receiver)
-    }
-}
-*/

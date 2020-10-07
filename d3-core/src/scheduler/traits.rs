@@ -43,7 +43,7 @@ pub trait ExecutorFactory {
     /// set the number of executor threads
     fn with_workers(&self, workers: usize);
     /// get the system queues: run_queue, wait_queue
-    fn get_queues(&self) -> (TaskInjector, TaskInjector);
+    fn get_queues(&self) -> (TaskInjector, SchedTaskInjector);
     /// start the executor
     fn start(&self, monitor: MonitorSender, scheduler: SchedSender) -> ExecutorControlObj;
 }
@@ -51,6 +51,7 @@ pub type ExecutorFactoryObj = Arc<dyn ExecutorFactory>;
 
 /// The model for a system queue
 pub type TaskInjector = Arc<deque::Injector<Task>>;
+pub type SchedTaskInjector = Arc<deque::Injector<SchedTask>>;
 
 pub trait ExecutorControl: Send + Sync {
     /// notifies the executor that an executor is parked
@@ -69,39 +70,27 @@ pub enum SchedCmd {
     Start,
     Stop,
     Terminate(bool),
-    New(ShareableMachine),
-    Waiting(u128),
-    Remove(u128),
-    ErrorRecv(u128),
-    RecvBlock(u128),
+    New(MachineAdapter),
+    Waiting(usize),
+    Remove(usize),
+    ErrorRecv(usize),
+    RecvBlock(usize, Instant),
     // Executor stuff
     RebuildStealers,
 }
 pub type SchedSender = crossbeam::Sender<SchedCmd>;
 pub type SchedReceiver = crossbeam::Receiver<SchedCmd>;
 
-/// The factory for the scheduler
 pub trait SchedulerFactory {
-    /// get a clone of a sender for the scheduler
     fn get_sender(&self) -> SchedSender;
-    /// start the scheduler
-    fn start(
-        &self,
-        monitor: MonitorSender,
-        queues: (TaskInjector, TaskInjector),
-    ) -> SchedulerControlObj;
+    // start has to return a sized object trait, I prefer Arc over Box
+    fn start(&self, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Arc<dyn Scheduler>;
 }
-pub type SchedulerFactoryObj = Arc<dyn SchedulerFactory>;
-
-/// The scheduler control
-pub trait SchedulerControl: Send + Sync {
+/// The scheduler trait
+pub trait Scheduler: Send + Sync {
     /// assigns a new machine, making it eligable for scheduling and running
-    fn assign_machine(&self, machine: SharedCollectiveAdapter);
+    fn assign_machine(&self, machine: MachineAdapter);
     /// stop the scheduler
     fn stop(&self);
 }
-pub type SchedulerControlObj = Arc<dyn SchedulerControl>;
 
-/// ShareableMachine is an alias which contends with SharedCollectiveAdapter
-/// one of them needs to go...
-pub type ShareableMachine = SharedCollectiveAdapter;

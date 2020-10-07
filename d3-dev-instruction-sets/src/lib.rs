@@ -1,3 +1,5 @@
+
+
 #[allow(unused_imports)]
 #[macro_use] extern crate smart_default;
 
@@ -5,8 +7,10 @@
 // this should become a prelude
 #[allow(unused_imports)]
 use std::sync::{Arc,Mutex};
+use uuid::{self, Uuid};
 
 use d3_core::machine_impl::*;
+
 
 #[allow(unused_imports)]
 use d3_derive::*;

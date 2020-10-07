@@ -116,6 +116,7 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
         .unwrap();
 
     // drive the forwarders...
+    let t = std::time::Instant::now();
     for _ in 0..params.iterations {
         for msg_id in 0..params.messages {
             match first_sender.try_send(TestMessage::TestData(msg_id)) {
@@ -136,7 +137,7 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
             Ok(m) => {
                 assert_eq!(m, TestMessage::TestData(total_messages));
                 log::info!("an iteration completed");
-            }
+            },
             Err(_) => {
                 for forwarder in &instances {
                     log::warn!(
@@ -145,10 +146,10 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
                         forwarder.lock().unwrap().get_and_clear_received_count()
                     );
                 }
-            }
+            },
         };
     }
-    log::info!("completed daisy-chain run");
+    log::info!("completed daisy-chain run in {:#?}", t.elapsed());
     /* Enable if you want to watch cleanup
     // unnecessary, but this gives a graceful cleanup before proceeding...
     drop(machines);
@@ -288,15 +289,15 @@ impl Machine<TestMessage> for Forwarder {
                 mutable.notify_sender = Some(sender);
                 mutable.notify_count = on_receive_count;
                 return;
-            }
+            },
             TestMessage::AddSender(sender) => {
                 mutable.senders.push(sender);
                 return;
-            }
+            },
             TestMessage::ForwardingMultiplier(count) => {
                 mutable.forwarding_multiplier = count;
                 return;
-            }
+            },
             _ => (),
         }
         self.received_count.fetch_add(1, Ordering::SeqCst);
@@ -341,7 +342,8 @@ impl Machine<TestMessage> for Forwarder {
             TestMessage::TestCallback(sender, mut test_struct) => {
                 test_struct.received_by = self.id;
                 sender.send(TestMessage::TestStruct(test_struct)).unwrap();
-            }
+            },
+            /*
             TestMessage::TestData(seq) => {
                 if seq == 0 as usize {
                     mutable.sequence.store(1, Ordering::SeqCst);
@@ -352,7 +354,8 @@ impl Machine<TestMessage> for Forwarder {
                         assert_eq!(seq, count);
                     }
                 }
-            }
+            },
+            */
             _ => (),
         }
     }

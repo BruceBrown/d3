@@ -8,6 +8,7 @@ use std::convert::TryInto;
 
 use atomic_refcell::AtomicRefCell;
 use crossbeam::atomic::AtomicCell;
+use uuid::{self, Uuid};
 
 #[allow(unused_imports)]
 use d3_core::executor::*;

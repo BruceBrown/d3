@@ -1,5 +1,6 @@
 use super::*;
-use self::{traits::*, scheduler::*, executor::*, overwatch::*};
+use self::{traits::*, executor::*, overwatch::*};
+
 
 ///
 /// A bit of an explanation is needed here. The server state and server struct live in
@@ -37,7 +38,7 @@ enum ServerState {
 enum ServerField {
     #[default]
     Uninitialized,
-    Scheduler(SchedulerControlObj),
+    Scheduler(Arc<dyn Scheduler>),
     Executor(ExecutorControlObj),
     Monitor(MonitorControlObj),
 }
@@ -51,7 +52,7 @@ pub struct Server {
 }
 impl Server {
     /// assign a machine to the scheduler
-    pub fn assign_machine(machine: SharedCollectiveAdapter) {
+    pub fn assign_machine(machine: MachineAdapter) {
         match &server.borrow().scheduler {
             ServerField::Scheduler(scheduler) => scheduler.assign_machine(machine),
             _ => log::error!("Server not running, unable to assign machine."),
@@ -69,7 +70,7 @@ pub fn start_server() {
 
     let monitor_factory = SystemMonitorFactory::new();
     let executor_factory = SystemExecutorFactory::new();
-    let scheduler_factory = new_scheduler_factory();
+    let scheduler_factory = sched_factory::create_sched_factory();
     executor_factory.with_workers(get_executor_count());
 
     let executor =

@@ -1,11 +1,19 @@
 use super::*;
 use self::{connection::*, receiver::*, sender::*};
 
+///
+/// This is a small wrapper around the crossbeam channel. There are a
+/// few reasons for this. We may want to use adifferent channel
+/// implementation in the future, so we want to encapsulate it.
+/// We want to take action when sending to a channel that is full,
+/// otherwise we block a thread, forcing the spawning of a thread.
+/// We want to enforce that the channels are limited to using
+/// only types that derive from MachineImpl.
+/// 
 
+/// The channel id can be used in logging, otherwise its useless
 static CHANNEL_ID: AtomicUsize = AtomicUsize::new(1);
 
-// channel construction is limited to using only instruction sets that
-// implement MachineImpl. 
 
 /// Create a channel with a fixed capacity.
 pub fn channel_with_capacity<T>(capacity: usize) -> (Sender<T>, Receiver<T>)
