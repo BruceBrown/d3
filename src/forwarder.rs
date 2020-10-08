@@ -3,8 +3,10 @@ use super::*;
 use std::fmt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use rand::distributions::{Distribution, Uniform};
+
 use d3_core::machine_impl::*;
-use d3_dev_instruction_sets::{TestMessage};
+use d3_dev_instruction_sets::{TestMessage, ChaosMonkeyMutation};
 
 
 struct ForwarderSettings {
@@ -12,6 +14,7 @@ struct ForwarderSettings {
     default: settings::FieldMap,
     daisy_chain: Option<settings::FieldMap>,
     fanout_fanin: Option<settings::FieldMap>,
+    chaos_monkey: Option<settings::FieldMap>,
 }
 
 /// Take the setting from the variant and turn them into a concrete stuct that we can
@@ -26,13 +29,15 @@ pub fn run(settings: &settings::Settings) {
         if let Some(v) = a.get(&settings::Additional::Forwarder) {
             // v is a variant in AdditionalVariant, need to extract things info the Forwarder
             let f = match v.clone() {
-                settings::AdditionalVariant::Forwarder {run, default, daisy_chain, fanout_fanin } => ForwarderSettings { run, default, daisy_chain, fanout_fanin },
+                settings::AdditionalVariant::Forwarder {run, default, daisy_chain, fanout_fanin, chaos_monkey } =>
+                 ForwarderSettings { run, default, daisy_chain, fanout_fanin, chaos_monkey },
             };
             // at this point f represents the Forwarder parameters
             for r in &f.run {
                 match r {
                     settings::Field::daisy_chain => run_daisy_chain(&f),
                     settings::Field::fanout_fanin => run_fanout_fanin(&f),
+                    settings::Field::chaos_monkey => run_chaos_monkey(&f),
                     _=> (),
                 }
             }
@@ -53,6 +58,7 @@ struct RunParams {
     iterations: usize,
     forwarding_multiplier: usize,
     timeout: std::time::Duration,
+    unbound_queue: bool,
 }
 
 // convert from a field map to RunParams
@@ -71,10 +77,11 @@ impl From<settings::FieldMap> for RunParams {
             forwarding_multiplier: *map
                 .get(&settings::Field::forwarding_multiplier)
                 .expect("forwarding_multiplier missing"),
-
             timeout: std::time::Duration::from_secs(
                 *map.get(&settings::Field::timeout).expect("timeout missing") as u64,
             ),
+            unbound_queue: *map
+                .get(&settings::Field::unbound_queue).unwrap_or(&0) != 0,
         }
     }
 }
@@ -93,14 +100,21 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
 
     let mut machines: Vec<TestMessageSender> = Vec::with_capacity(params.machine_count);
     let mut instances: Vec<Arc<Mutex<Forwarder>>> = Vec::with_capacity(params.machine_count);
-    let f = Forwarder::new(1);
-    let (_f, s) = executor::connect(f);
+    let (_f, s) = if params.unbound_queue {
+        executor::connect_unbounded(Forwarder::new(1))
+    } else {
+        executor::connect(Forwarder::new(1))
+    };
     instances.push(_f);
     let first_sender = s.clone();
     let mut last_sender = s.clone();
     machines.push(s);
     for idx in 2..=params.machine_count {
-        let (_f, s) = executor::connect(Forwarder::new(idx));
+        let (_f, s) = if params.unbound_queue {
+            executor::connect_unbounded(Forwarder::new(idx))
+        } else {
+            executor::connect(Forwarder::new(idx))
+        };    
         instances.push(_f);
         last_sender.send(TestMessage::AddSender(s.clone())).unwrap();
         last_sender.send(TestMessage::ForwardingMultiplier(params.forwarding_multiplier)).unwrap();
@@ -182,11 +196,25 @@ fn run_fanout_fanin(settings: &ForwarderSettings) {
     );
 
     let mut machines: Vec<TestMessageSender> = Vec::with_capacity(params.machine_count);
-    let (_f, fanout_sender) = executor::connect(Forwarder::new(1));
-    let (fanin, fanin_sender) = executor::connect_with_capacity(Forwarder::new(2), fanin_capacity);
+    let (_f, fanout_sender) = if params.unbound_queue {
+        executor::connect_unbounded(Forwarder::new(1))
+    } else {
+        executor::connect(Forwarder::new(1))
+    };
+
+    let (fanin, fanin_sender) = if params.unbound_queue {
+        executor::connect_unbounded(Forwarder::new(2))
+    } else {
+        executor::connect_with_capacity(Forwarder::new(2), fanin_capacity)
+    };
 
     for idx in 3..=params.machine_count {
-        let (_f, s) = executor::connect(Forwarder::new(idx));
+        let (_f, s) = if params.unbound_queue {
+            executor::connect_unbounded(Forwarder::new(idx))
+        } else {
+            executor::connect(Forwarder::new(idx))
+        };
+    
         fanout_sender
             .send(TestMessage::AddSender(s.clone()))
             .unwrap();
@@ -224,7 +252,80 @@ fn run_fanout_fanin(settings: &ForwarderSettings) {
     }
 }
 
+fn run_chaos_monkey(settings: &ForwarderSettings) {
+    // get params, this will wipe out fields.
+    let fields = match &settings.chaos_monkey {
+        Some(map) => merge_maps(settings.default.clone(), map.clone()),
+        None => settings.default.clone(),
+    };
+    let params = RunParams::from(fields);
 
+    let fields = match &settings.chaos_monkey {
+        Some(map) => merge_maps(settings.default.clone(), map.clone()),
+        None => settings.default.clone(),
+    };
+    let inflection_value = *fields
+        .get(&settings::Field::inflection_value)
+        .unwrap_or(&1usize);
+    log::info!(
+        "chaos_monkey: {:?}, inflection_value {}",
+        params, inflection_value
+    );
+
+    let mut machines: Vec<TestMessageSender> = Vec::with_capacity(params.machine_count);
+
+    // we're going to create N machines, each having N senders, plus a notifier.
+    for idx in 1..=params.machine_count {
+        let (_f, s) = if params.unbound_queue {
+            executor::connect_unbounded(Forwarder::new(idx))
+        } else {
+            executor::connect(Forwarder::new(idx))
+        };
+        machines.push(s);
+    }
+    let (notify, notifier) = executor::connect(Forwarder::new(params.machine_count+1));
+
+    log::debug!("machines assembled, configuring now...");
+    // build a complete map where every machine has a sender to every other machine
+    // may need to build a partial mapping for large config, let's see
+    for s1 in &machines {
+        for s2 in &machines {
+            s2.send(TestMessage::AddSender(s1.clone())).unwrap();
+        }
+        // chaos monkey ignores the count
+        s1.send(TestMessage::Notify(notifier.clone(), 0)).unwrap();
+    }
+    let (sender, receiver) = channel();
+    notifier
+        .send(TestMessage::Notify(sender, params.messages))
+        .unwrap();
+    let range = Uniform::from(0..machines.len());
+    let mut rng = rand::rngs::OsRng::default();
+
+    log::info!("machine configuration complete, let's monkey with them");
+    for _ in 0..params.iterations {
+        for _ in 0..params.messages {
+            let m = ChaosMonkey::new(inflection_value as u32);
+            let idx = range.sample(&mut rng);
+            machines[idx].send(m.as_variant()).unwrap();
+        }
+        log::info!("sent {} messages, waiting for response", params.messages);
+        match receiver.recv_timeout(params.timeout) {
+            Ok(m) => {
+                assert_eq!(m, TestMessage::TestData(params.messages));
+                log::info!("an iteration completed");
+            }
+            Err(e) => {
+                log::info!("error {}", e);
+                log::info!(
+                    "chaos monkey received: {} messages",
+                    notify.lock().unwrap().get_and_clear_received_count()
+                );
+                return;
+            }
+        };
+    }
+}
 type TestMessageSender = Sender<TestMessage>;
 /// The Forwarder is the swiss army knife for tests. It can be a fanin, fanout, chain, or callback receiver.
 #[derive(Default)]
@@ -246,11 +347,20 @@ pub struct ForwarderMutable {
     notify_count: usize,
     /// notify_sender is sent a TestData message with the data being the number of messages received.
     notify_sender: Option<TestMessageSender>,
-    /// sequencing
-    sequence: AtomicUsize,
+    /// sequencing, may be obsoleted due to forwarding multiplier
+    /// sequence: AtomicUsize,
     /// forwarding multiplier
     #[default = 1]
     forwarding_multiplier: usize,
+    // Chaos monkey random
+    #[default(Uniform::from(0..1))]
+    range: Uniform<usize>,
+    rng: rand::rngs::OsRng,
+}
+impl ForwarderMutable {
+    fn get_monkey_fwd(&mut self) -> usize {
+        self.range.sample(&mut self.rng)
+    }
 }
 
 impl Forwarder {
@@ -276,8 +386,7 @@ impl Machine<TestMessage> for Forwarder {
         // drop senders
         let mut mutable = self.mutable.lock().unwrap();
         mutable.senders.clear();
-        let sender = mutable.notify_sender.take();
-        drop(sender);
+        let _ = mutable.notify_sender.take();
     }
 
     fn receive(&self, message: TestMessage) {
@@ -303,6 +412,20 @@ impl Machine<TestMessage> for Forwarder {
         self.received_count.fetch_add(1, Ordering::SeqCst);
         // forward the message
         match message {
+            TestMessage::ChaosMonkey{counter, counter_max, counter_mutation} => {
+                let mut m = ChaosMonkey{counter, counter_max, counter_mutation};
+                // one time setup
+                if m.counter == 0 { mutable.range = Uniform::from(0..mutable.senders.len()); }
+                match m.next() {
+                    ChaosMonkeyAction::Forward => {
+                        let idx = mutable.get_monkey_fwd();
+                        mutable.senders[idx].send(m.as_variant()).unwrap();
+                    },
+                    ChaosMonkeyAction::Notify => {
+                        mutable.notify_sender.as_ref().unwrap().send(TestMessage::TestData(0)).unwrap();
+                    },
+                }
+            }
             TestMessage::TestData(_seq) => mutable
             .senders
             .iter()
@@ -315,8 +438,8 @@ impl Machine<TestMessage> for Forwarder {
             .iter()
             .for_each(|sender| for _ in 0..mutable.forwarding_multiplier { sender.send(message.clone()).unwrap()}),
         };
-        if mutable.notify_count > 0 && (self.received_count.load(Ordering::SeqCst) % 10000 == 0) {
-            log::info!(
+        if mutable.notify_count > 0 && (self.received_count.load(Ordering::SeqCst) % 100000 == 0) {
+            log::debug!(
                 "forwarder {} rcvs {} out of {}", self.id,
                 self.received_count.load(Ordering::SeqCst),
                 mutable.notify_count
@@ -338,12 +461,12 @@ impl Machine<TestMessage> for Forwarder {
             self.received_count.store(0, Ordering::SeqCst);
             self.send_count.store(0, Ordering::SeqCst);
         }
+        /* We no longer test sequencing, so TestCallback can be further simplified.
         match message {
             TestMessage::TestCallback(sender, mut test_struct) => {
                 test_struct.received_by = self.id;
                 sender.send(TestMessage::TestStruct(test_struct)).unwrap();
             },
-            /*
             TestMessage::TestData(seq) => {
                 if seq == 0 as usize {
                     mutable.sequence.store(1, Ordering::SeqCst);
@@ -355,8 +478,12 @@ impl Machine<TestMessage> for Forwarder {
                     }
                 }
             },
-            */
             _ => (),
+        }
+        */
+        if let TestMessage::TestCallback(sender, mut test_struct) = message {
+            test_struct.received_by = self.id;
+            sender.send(TestMessage::TestStruct(test_struct)).unwrap();
         }
     }
 }
@@ -369,5 +496,54 @@ impl fmt::Display for Forwarder {
             self.id,
             self.received_count.load(Ordering::SeqCst)
         )
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum ChaosMonkeyAction {
+    Forward,
+    Notify
+}
+#[derive(Debug)]
+struct ChaosMonkey  {
+    // A counter which is either incremented or decremented                      
+    counter: u32,
+    // The max value of the counter
+    counter_max: u32,
+    // bool indicating if inrementing or decrementing
+    counter_mutation: ChaosMonkeyMutation,
+}
+impl ChaosMonkey {
+    fn new(counter_max: u32) -> Self {
+        Self {counter: 0, counter_max, counter_mutation: ChaosMonkeyMutation::Increment}
+    }
+    fn as_variant(&self) -> TestMessage {
+        TestMessage::ChaosMonkey {
+            counter: self.counter,
+            counter_max: self.counter_max,
+            counter_mutation: self.counter_mutation
+        }
+    }
+    fn next(&mut self) -> ChaosMonkeyAction {
+        match self.counter {
+            0 => match self.counter_mutation {
+                ChaosMonkeyMutation::Decrement => ChaosMonkeyAction::Notify,
+                ChaosMonkeyMutation::Increment => { self.counter += 1; ChaosMonkeyAction::Forward }
+            },
+            c if c >= self.counter_max => {
+                match self.counter_mutation {
+                    ChaosMonkeyMutation::Decrement => { self.counter -= 1 },
+                    ChaosMonkeyMutation::Increment => { self.counter_mutation = ChaosMonkeyMutation::Decrement },
+                }
+                ChaosMonkeyAction::Forward
+            },
+            _ => {
+                match self.counter_mutation {
+                    ChaosMonkeyMutation::Decrement => { self.counter -= 1 },
+                    ChaosMonkeyMutation::Increment => { self.counter += 1 },
+                }
+                ChaosMonkeyAction::Forward
+            }
+        }
     }
 }

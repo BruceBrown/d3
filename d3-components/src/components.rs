@@ -78,40 +78,65 @@ where T: MachineImpl + MachineImpl<InstructionSet = T> + std::fmt::Debug
 mod tests {
     #[allow(unused_imports)]
     use super::*;
-    use d3_lib::instruction_sets::TestMessage;
+    use simplelog::*;
+
+    use crate::settings::{Service};
+    use d3_core::executor;
+
+    #[derive(Debug, MachineImpl)]
+    pub enum TestMessage {
+        Test,
+    }
 
     #[test]
-    fn test_destination_sender() {
-
+    fn test_new_session() {
+        // tests that we can have an instruction with any sender as:
+        // Arc<dyn std::any::Any + Send + Sync> and convert back to
+        // the correct sender. This is critical as we use the service
+        // to indicate the type of sender, and only components which
+        // understand the service should attempt to participate by
+        // decoding the sender and responding appropriately.
+        #[derive(Default)]
         struct Controller {
+            counter: AtomicCell<usize>,
         }
         impl Machine<ComponentCmd> for Controller {
             fn receive(&self, cmd: ComponentCmd) {
+                println!("recv");
                 match cmd {
-                    ComponentCmd::NewSession(conn_id, service, pkg) => {
-                        if let Ok(sender) = Arc::clone(&pkg).downcast::<Sender<ComponentCmd>>() {
-                            println!("got a component sender");
-                        } else if let Ok(sender) = Arc::clone(&pkg).downcast::<Sender<TestMessage>>() {
-                            println!("got a test sender");
-                        }
+                    ComponentCmd::NewSession(conn_id, service, sender) => {
+                        assert_eq!(conn_id, 12345);
+                        assert_eq!(service, Service::EchoServer);
+                        assert_eq!(false, Arc::clone(&sender).downcast::<Sender<TestMessage>>().is_ok());
+                        assert_eq!(true, Arc::clone(&sender).downcast::<Sender<ComponentCmd>>().is_ok());
+                        self.counter.store(1);
                     },
-                    _ => (),
+                    _ => assert_eq!(true, false),
                 }
             }
         }
-
         impl Machine<TestMessage> for Controller {
             fn receive(&self, cmd: TestMessage) {
+                assert_eq!(true, false);
             }
         }
+        // install a simple logger
+        CombinedLogger::init(
+            vec![
+                TermLogger::new(LevelFilter::Trace, Config::default(), TerminalMode::Mixed)
+            ]
+        ).unwrap();
+        // tweaks for more responsive testing
+        executor::set_selector_maintenance_duration(std::time::Duration::from_millis(20));
 
         executor::start_server();
-        let (m, component_sender) = executor::connect::<_,ComponentCmd>(Controller{});
+        thread::sleep(std::time::Duration::from_millis(20));
+        let (m, component_sender) = executor::connect::<_,ComponentCmd>(Controller::default());
         let test_sender = executor::and_connect::<_,TestMessage>(&m);
-        let pkg = Arc::new(component_sender.clone());
-        component_sender.send(ComponentCmd::NewSession(1234, settings::Service::ChatServer, pkg));
-        thread::sleep(std::time::Duration::from_millis(50));
 
+        component_sender.send(ComponentCmd::NewSession(12345, Service::EchoServer, Arc::new(component_sender.clone())));
+        thread::sleep(std::time::Duration::from_millis(50));
+        assert_eq!(m.lock().unwrap().counter.load(), 1);
         executor::stop_server();
     }
 }

@@ -1,6 +1,15 @@
 # d3 -- Revision History
+## Chaos Monkey Added to Forwarder for Testing
+The daisy-chain test is essentially a pulse wave though all the machine.
+The fanout-fanin test is a single shock wave to the fanin, where many of the fanout will block on send.
+The chaos-monkey is more random, when a forwarder receives a ChaosMonkey instruction it modifes it and either sends it to a random machine, including itself, or to the notifier if it is complete. The modification is to increment the count until it hits an inflection point, once that is hit the modification is to decrement the instuction count. When the count hits 0 a notification is sent. This should stress the scheduler and executor as a large number of random machines will try to send messages to each other.
+
+Additionally, added unbound_queue option to forwarder, allowing for use of unbound queues -- dangerous on a server. The daisy-chain, with 12 machines, sending 1 message with a multiplier of 5 will send 48,828,125 messages. Add an additional, 13th machine and 244,140,625 messages are sent.
+
+Took some time to get inline UTs working again. They had become stale as a few interfaces changed.
+
 ## Scheduler Reorg, Goal is to Halve the Time Spent in Scheduler
-Changed out u128 in Machine (and elsehwere for a Uuid). Added a key: usize to the machine, and elsewhere. The key is set when storing into the collective. Replaced HashMap with Slab for storing machines. Replaced HashMap with IndexMap for storing Select index to machine key mapping.
+Changed out u128 in Machine (and elsewhere for a Uuid). Added a key: usize to the machine, and elsewhere. The key is set when storing into the collective. Replaced HashMap with Slab for storing machines. Replaced HashMap with IndexMap for storing Select index to machine key mapping.
 
 Now for the testing. We're using the `daisy-chain` test with:
 '''

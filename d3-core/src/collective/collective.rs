@@ -94,6 +94,4 @@ mod tests {
     #[allow(unused_imports)]
     use super::*;
 
-    #[test]
-    fn alice_adapter() {}
 }

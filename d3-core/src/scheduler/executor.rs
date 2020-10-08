@@ -266,6 +266,10 @@ impl ThreadData {
                 });
                 machine.receive_cmd( time_slice, stats);
                 stats.recv_time += t.elapsed();
+                tls_executor_data.with(|t| {
+                    let mut tls = t.borrow_mut();
+                    tls.machine = ExecutorDataField::Uninitialized;
+                });
                 self.shared_info.lock().as_mut().unwrap().set_idle();
                 self.reschedule(machine);
                 if self.shared_info.lock().unwrap().get_state() == ExecutorState::Parked {
@@ -528,7 +532,7 @@ impl Drop for Executor {
         log::info!("synchronizing worker thread shutdown");
         for w in self.workers.write().unwrap().iter_mut() {
             if let Some(thread) = w.1.thread.take() {
-                thread.join().unwrap();
+                if thread.join().is_err(){}
             }
         }
         log::info!("dropped thread pool");
@@ -538,21 +542,43 @@ impl Drop for Executor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::overwatch::SystemMonitorFactory;
-    use crate::scheduler::SystemSchedulerFactory;
-    use crate::setup_teardown::tests::run_test;
-    use d3_channel::*;
-    use d3_instruction_sets::*;
-    use d3_machine::*;
     use std::fmt;
     use std::thread;
     use std::time::Duration;
+    
+    use self::channel::{channel::{channel, channel_with_capacity},
+        sender::Sender, receiver::Receiver
+    };
+
+
+    use self::overwatch::{SystemMonitorFactory};
+    use self::sched_factory::create_sched_factory;
+    use self::setup_teardown::tests::run_test;
+    
+    use d3_derive::*;
+
+    #[allow(dead_code)]
+    #[derive(Debug, Clone, Eq, PartialEq, MachineImpl)]
+    pub enum TestMessage {
+        Test,
+        TestData(usize),
+        TestStruct(TestStruct),
+        TestCallback(Sender<TestMessage>, TestStruct),
+        AddSender(Sender<TestMessage>),
+        Notify(Sender<TestMessage>, usize),
+    }
+
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub struct TestStruct {
+    pub from_id: usize,
+    pub received_by: usize,
+}
 
     #[test]
     fn can_terminate() {
         let monitor_factory = SystemMonitorFactory::new();
         let executor_factory = SystemExecutorFactory::new();
-        let scheduler_factory = SystemSchedulerFactory::new();
+        let scheduler_factory = create_sched_factory();
         executor_factory.with_workers(16);
         let executor =
             executor_factory.start(monitor_factory.get_sender(), scheduler_factory.get_sender());
@@ -567,7 +593,7 @@ mod tests {
             let f = Forwarder::default();
             let (t, s) = machine::connect(f);
             s.send(TestMessage::Test).unwrap();
-            thread::sleep(Duration::from_millis(20));
+            thread::sleep(Duration::from_millis(40));
             assert_eq!(t.lock().unwrap().get_and_clear_received_count(), 1);
             assert_eq!(t.lock().unwrap().get_and_clear_received_count(), 0);
         });
@@ -615,8 +641,8 @@ mod tests {
             s.send(TestMessage::Notify(sender.clone(), 2)).unwrap();
             s.send(TestMessage::Test).unwrap();
             match r.recv_timeout(Duration::from_millis(100)) {
-                Ok(m) => panic!("notification arrived early"),
-                Err(_RecvTimeoutError) => (),
+                Ok(_m) => panic!("notification arrived early"),
+                Err(_e) => (),
             }
             s.send(TestMessage::Test).unwrap();
             match r.recv_timeout(Duration::from_secs(1)) {
@@ -653,9 +679,9 @@ mod tests {
         // into the first, which should run through all the forwarders and end
         // with a notification.
 
-        let machine_count = 1000;
-        let messages = 50;
-        let iterations = 10;
+        let machine_count = 100;
+        let messages = 5;
+        let iterations = 2;
 
         run_test(|| {
             let mut machines: Vec<TestMessageSender> = Vec::with_capacity(machine_count);
@@ -687,7 +713,7 @@ mod tests {
                                 log::info!("full");
                                 first_sender.send(m).unwrap();
                             }
-                            crossbeam::TrySendError::Disconnected(m) => {
+                            crossbeam::TrySendError::Disconnected(_m) => {
                                 log::info!("disconnected");
                             }
                         },
@@ -727,9 +753,9 @@ mod tests {
         // a bounded pipe. The result is going to be parking of senders and the
         // executor is going to need a means of processing other work, as it
         // can't block on the send queue.
-        let machine_count = 1500;
-        let messages = 200;
-        let iterations = 1;
+        let machine_count = 100;
+        let messages = 50;
+        let iterations = 2;
         run_test(|| {
             let mut machines: Vec<TestMessageSender> = Vec::with_capacity(machine_count);
             let (_f, fanout_sender) = machine::connect(Forwarder::new(1));
@@ -764,17 +790,19 @@ mod tests {
     use std::sync::Mutex;
     type TestMessageSender = Sender<TestMessage>;
     /// The Forwarder is the swiss army knife for tests. It can be a fanin, fanout, chain, or callback receiver.
+    /// This is a striped down forwarder, the full one is included in main. This is just enough to test that
+    /// the schduler and executor are well behaved.
     #[derive(Default)]
     pub struct Forwarder {
         id: usize,
         /// received_count is the count of messages received by this forwarder.
         received_count: AtomicUsize,
         /// The mutable bits...
-        mutations: Mutex<ForwarderMutations>,
+        mutable: Mutex<ForwarderMutable>,
     }
 
     #[derive(Default)]
-    pub struct ForwarderMutations {
+    pub struct ForwarderMutable {
         /// collection of senders, each will be sent any received message.
         senders: Vec<TestMessageSender>,
         /// notify_count is compared against received_count for means of notifcation.
@@ -803,42 +831,42 @@ mod tests {
     }
 
     impl Machine<TestMessage> for Forwarder {
-        fn receive(&self, message: &TestMessage) {
+        fn receive(&self, message: TestMessage) {
             // it a bit ugly, but its also a clean way to handle the data we need to access
-            let mut mutations = self.mutations.lock().unwrap();
+            let mut mutable = self.mutable.lock().unwrap();
             // handle configuation messages without bumping counters
             match message {
                 TestMessage::Notify(sender, on_receive_count) => {
-                    mutations.notify_sender = Some(sender.clone());
-                    mutations.notify_count = *on_receive_count;
+                    mutable.notify_sender = Some(sender.clone());
+                    mutable.notify_count = on_receive_count;
                     return;
                 }
                 TestMessage::AddSender(sender) => {
-                    mutations.senders.push(sender.clone());
+                    mutable.senders.push(sender.clone());
                     return;
                 }
                 _ => (),
             }
             self.received_count.fetch_add(1, Ordering::SeqCst);
             // forward the message
-            &mutations
+            &mutable
                 .senders
                 .iter()
                 .for_each(|sender| sender.send(message.clone()).unwrap());
-            if mutations.notify_count > 0
+            if mutable.notify_count > 0
                 && (self.received_count.load(Ordering::SeqCst) % 5000 == 0)
             {
                 log::info!(
                     "rcvs {} out of {}",
                     self.received_count.load(Ordering::SeqCst),
-                    mutations.notify_count
+                    mutable.notify_count
                 );
             }
             // send notification if we've met the criteria
-            if self.received_count.load(Ordering::SeqCst) == mutations.notify_count
-                && mutations.notify_sender.is_some()
+            if self.received_count.load(Ordering::SeqCst) == mutable.notify_count
+                && mutable.notify_sender.is_some()
             {
-                mutations
+                mutable
                     .notify_sender
                     .as_ref()
                     .unwrap()
@@ -854,11 +882,11 @@ mod tests {
                     sender.send(TestMessage::TestStruct(test_struct)).unwrap();
                 }
                 TestMessage::TestData(seq) => {
-                    if *seq == 0 as usize {
-                        mutations.sequence = 0
+                    if seq == 0 as usize {
+                        mutable.sequence = 0
                     } else {
-                        mutations.sequence += 1;
-                        assert_eq!(*seq, mutations.sequence);
+                        mutable.sequence += 1;
+                        assert_eq!(seq, mutable.sequence);
                     }
                 }
                 _ => (),

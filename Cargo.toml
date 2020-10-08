@@ -38,9 +38,15 @@ smart-default = "0.6.0"
 atomic_refcell = "0.1.6"
 log = "0.4.11"
 simplelog = "0.8.0"
+rand = "0.7.3"
 
 d3-core = {version = "0.1.0", path = "./d3-core"}
 d3-components =  {version = "0.1.0", path = "./d3-components"}
 echo-server = {version = "0.1.0", path = "./echo-server"}
 chat-server = {version = "0.1.0", path = "./chat-server"}
 d3-dev-instruction-sets = {version = "0.1.0", path = "./d3-dev-instruction-sets"}
+
+[dev-dependencies]
+uuid = { version = "0.8", default-features = false, features = ["v4"] }
+
+d3-derive = {version = "0.1.0", path = "./d3-derive"}

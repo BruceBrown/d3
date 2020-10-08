@@ -129,14 +129,3 @@ where T: MachineImpl,
         sender,
     }
 }
-/*
-impl<T> ChannelHandle for Sender<T>
-where T: 'static + MachineImpl + Clone,
-{
-    fn add_select<'a,'b>(&'a self, select: &mut crossbeam::Select<'b>) -> usize
-    where 'a: 'b,
-    {
-        select.send(&self.sender)
-    }
-}
-*/

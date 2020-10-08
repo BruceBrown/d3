@@ -48,7 +48,7 @@ mod collective {
     #![allow(dead_code)]
     use super::*;
     use crate::machine::{machine::*};
-    use crate::tls::{tls_executor::*, collective::*};
+    use crate::tls::{collective::*};
     use crate::channel::{receiver::*, sender::*};
     pub mod collective;
     pub mod machine;
@@ -62,7 +62,7 @@ mod scheduler {
     mod executor;
     pub mod machine;
     mod overwatch;
-    mod sched;
+    pub mod sched;
     mod sched_factory;
     pub mod setup_teardown;
     mod traits;
@@ -100,14 +100,12 @@ pub mod executor {
     }, setup_teardown::{
         start_server, stop_server,
         get_executor_count, set_executor_count
+        
+    }, sched::{
+        get_machine_count_estimate, set_machine_count_estimate,
+        get_selector_maintenance_duration, set_selector_maintenance_duration
     }};
+
     pub use crate::collective::{ collective::{get_time_slice, set_time_slice,}};
 }
 
-
-#[cfg(test)]
-use super::*;
-mod tests {
-    #[test]
-    fn it_works() {}
-}

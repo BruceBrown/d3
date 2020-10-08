@@ -7,7 +7,6 @@
 // this should become a prelude
 #[allow(unused_imports)]
 use std::sync::{Arc,Mutex};
-use uuid::{self, Uuid};
 
 use d3_core::machine_impl::*;
 
@@ -29,7 +28,7 @@ mod state_table;
 pub use state_table::StateTable;
 
 mod test_message;
-pub use test_message::{TestMessage, TestStruct};
+pub use test_message::{TestMessage, TestStruct, ChaosMonkeyMutation};
 
 
 #[cfg(test)]

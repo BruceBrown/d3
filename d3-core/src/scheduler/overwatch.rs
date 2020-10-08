@@ -120,20 +120,20 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    struct dummy {}
-    impl ExecutorControl for dummy {
-        fn parked_executor(&self, id: u128) {
-            panic!("executor should not be called")
-        }
-        fn stop(&self) {
-            panic!("executor should not be called")
-        }
+    struct Dummy {}
+    impl ExecutorControl for Dummy {
+        /// notifies the executor that an executor is parked
+        fn parked_executor(&self, _id: usize) {}
+        /// notifies the executor that an executor completed and can be joined
+        fn joinable_executor(&self, _id: usize) {}
+        /// stop the executor
+        fn stop(&self) {}
     }
 
     #[test]
     fn can_terminate() {
         let factory = SystemMonitorFactory::new();
-        let executor: ExecutorControlObj = Arc::new(dummy {});
+        let executor: ExecutorControlObj = Arc::new(Dummy {});
         let monitor = factory.start(executor);
         thread::sleep(Duration::from_millis(100));
         monitor.stop();

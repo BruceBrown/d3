@@ -138,7 +138,10 @@ fn run_server(settings: &settings::Settings) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use d3_lib::machine_impl::*;
+    use crossbeam::atomic::AtomicCell;
+    use d3_core::machine_impl::*;
+    use d3_derive::*;
+
     #[test]
     fn config() {
     }
@@ -152,6 +155,10 @@ mod tests {
             ]
         ).unwrap();
 
+        // tweaks for more responsive testing
+        executor::set_selector_maintenance_duration(std::time::Duration::from_millis(20));
+
+        // get the server running
         executor::start_server();
         std::thread::sleep(std::time::Duration::from_millis(20));
 
@@ -181,13 +188,14 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(50));
         assert_eq!(alice.lock().unwrap().get_state(), AliceCmd::Stop);
 
-        // drop her sender...
+        // drop her sender...and she should go away
         drop(alice_sender);
         std::thread::sleep(std::time::Duration::from_millis(100));
 
         // and lets see that she's been forgotten and no longer shared
         assert_eq!(Arc::strong_count(&alice), 1);
 
+        // now we can stop the server
         executor::stop_server();
     }
     // Here's a simple machine, we'll call her Alice.
@@ -199,8 +207,6 @@ mod tests {
         Stop,
     }
 
-    use crossbeam::atomic::AtomicCell;
-    use d3_lib::machine_impl::Machine;
     #[derive(Default)]
     struct Alice {
         state: AtomicCell<AliceCmd>,

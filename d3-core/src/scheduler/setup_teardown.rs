@@ -126,12 +126,21 @@ pub fn set_executor_count(new: usize) {
 pub mod tests {
     use super::*;
     use std::panic;
+    use simplelog::*;
+    use crate::scheduler::sched::set_selector_maintenance_duration;
 
     // common function for wrapping a test with setup/teardown logic
     pub fn run_test<T>(test: T) -> ()
     where
         T: FnOnce() -> () + panic::UnwindSafe,
     {
+        // install a simple logger
+        CombinedLogger::init(
+            vec![TermLogger::new(LevelFilter::Trace, Config::default(), TerminalMode::Mixed)]
+            ).unwrap();
+        // tweaks for more responsive testing
+        set_selector_maintenance_duration(std::time::Duration::from_millis(20));
+        
         setup();
 
         let result = panic::catch_unwind(|| test());
@@ -153,7 +162,7 @@ pub mod tests {
     #[test]
     fn test_stop() {
         run_test(|| {
-            std::thread::sleep_ms(200);
+            std::thread::sleep(std::time::Duration::from_millis(100));
         });
     }
 }

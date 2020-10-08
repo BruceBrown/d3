@@ -18,8 +18,9 @@ time_slice = 20
 [[additional]]
 [additional.Forwarder]
 run = [
-    "daisy_chain",
-    #"fanout_fanin",
+#    "daisy_chain",
+#    "fanout_fanin",
+    "chaos_monkey",
 ]
 
 [additional.Forwarder.default]
@@ -27,16 +28,35 @@ timeout = 30
 machines = 100
 messages = 20
 iterations = 1
+forwarding_multiplier = 1
 
 [additional.Forwarder.daisy_chain]
 timeout = 600
 machines = 4000
 messages = 400
 forwarding_multiplier = 1
-iterations = 10
+iterations = 1
+
 
 [additional.Forwarder.fanout_fanin]
 fanin_capacity = 10000
 machines = 2000
 messages = 100
 iterations = 1
+
+
+[additional.Forwarder.chaos_monkey]
+#
+# This will send ((inflection_value * 2) * messages) + messages + 1
+# per iteration. The `+ messages + 1` accounts for notification messages
+#
+# during setup, each machine is sent a sender for every machine, including itself.
+# For large tests, having a larger queue may reduce startup warnings, you use
+# the unbound_queue option
+#
+timeout = 600
+machines = 2000
+messages = 500
+inflection_value = 500
+iterations = 10
+unbound_queue = 1

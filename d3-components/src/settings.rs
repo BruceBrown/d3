@@ -96,12 +96,15 @@ pub enum Additional {
 pub enum Field {
     daisy_chain,
     fanout_fanin,
+    chaos_monkey,
     forwarding_multiplier,
     machines,
     messages,
     iterations,
     timeout,
     fanin_capacity,
+    inflection_value,
+    unbound_queue,
 }
 /// a more general solution would be to use a variant rather than usize
 pub type FieldMap = HashMap<Field, usize>;
@@ -116,6 +119,7 @@ pub enum AdditionalVariant {
         default: FieldMap,
         daisy_chain: Option<FieldMap>,
         fanout_fanin: Option<FieldMap>,
+        chaos_monkey: Option<FieldMap>,
     },
 }
 
