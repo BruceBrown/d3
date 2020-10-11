@@ -1,28 +1,28 @@
-
 // pull in commonly used elements
-use std::sync::{Arc, Weak, Mutex, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
-use std::thread;
-use std::collections::HashMap;
-use std::iter;
-use std::fmt;
 use std::cell::RefCell;
-
+use std::collections::HashMap;
+use std::fmt;
+use std::iter;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::thread;
+use std::time::{Duration, Instant};
 
 // bring in addition utilities
-use crossbeam::{atomic::AtomicCell};
 use atomic_refcell::AtomicRefCell;
+use crossbeam::atomic::AtomicCell;
 use uuid::Uuid;
 
 #[allow(unused_imports)]
-#[macro_use] extern crate smart_default;
+#[macro_use]
+extern crate smart_default;
 
 #[allow(unused_imports)]
-#[macro_use]extern crate log;
+#[macro_use]
+extern crate log;
 
 // pull in all of the modules
-mod machine {
+mod foundation {
     use super::*;
     pub mod machine;
     pub mod thread_safe;
@@ -30,16 +30,16 @@ mod machine {
 mod tls {
     #![allow(dead_code)]
     use super::*;
-    use crate::machine::{thread_safe::*};
-    pub mod tls_executor;
+    use crate::foundation::thread_safe::*;
     pub mod collective;
+    pub mod tls_executor;
 }
 mod channel {
     #![allow(dead_code)]
     use super::*;
-    use crate::machine::{machine::*};
+    use crate::foundation::machine::*;
     use crate::tls::tls_executor::ExecutorData;
-    pub mod channel;
+    pub mod machine_channel;
     mod connection;
     pub mod receiver;
     pub mod sender;
@@ -47,19 +47,18 @@ mod channel {
 mod collective {
     #![allow(dead_code)]
     use super::*;
-    use crate::machine::{machine::*};
-    use crate::tls::{collective::*};
     use crate::channel::{receiver::*, sender::*};
-    pub mod collective;
+    use crate::foundation::machine::*;
+    use crate::tls::collective::*;
     pub mod machine;
 }
 mod scheduler {
     #![allow(dead_code)]
     use super::*;
-    use crate::machine::{machine::*};
-    use crate::tls::{tls_executor::*, collective::*};
-    use crate::collective::{collective::*, machine::*};
-    mod executor;
+    use crate::collective::machine::*;
+    use crate::foundation::machine::*;
+    use crate::tls::{collective::*, tls_executor::*};
+    pub mod executor;
     pub mod machine;
     mod overwatch;
     pub mod sched;
@@ -72,40 +71,41 @@ mod scheduler {
 
 // package up things needed for #[derive(MachineImpl)]
 pub mod machine_impl {
-    pub use crate::channel::{channel::{channel, channel_with_capacity}, receiver::Receiver, sender::Sender};
-    pub use crate::collective::{ 
-        collective::{ get_time_slice },
-        machine::{ MachineBuilder }
+    pub use crate::channel::{
+        machine_channel::{channel, channel_with_capacity},
+        receiver::Receiver,
+        sender::Sender,
     };
-    pub use crate::tls::{ collective:: {
-        MachineDependentAdapter, ShareableMachine, MachineAdapter,
-        MachineState, CollectiveState,
+    pub use crate::collective::machine::MachineBuilder;
+    pub use crate::foundation::{machine::Machine, machine::MachineImpl};
+    pub use crate::tls::{
+        collective::{
+            CollectiveState, MachineAdapter, MachineDependentAdapter, MachineState,
+            ShareableMachine,
         },
-        tls_executor:: {
-            ExecutorDataField,
-            ExecutorStats, Task,TrySendError, tls_executor_data,CollectiveSenderAdapter, SharedCollectiveSenderAdapter
-        }
+        tls_executor::{
+            tls_executor_data, CollectiveSenderAdapter, ExecutorDataField, ExecutorStats,
+            SharedCollectiveSenderAdapter, Task, TrySendError,
+        },
     };
-    pub use crate::machine::{machine::Machine, machine::MachineImpl};
 }
 
 // package up thing needed to tune and start the schduler and inject
 // machines into the collective.
 pub mod executor {
-    pub use crate::scheduler::{machine::{
-        connect, connect_unbounded, connect_with_capacity,
-        and_connect, and_connect_unbounded, and_connect_with_capacity,
-        get_default_channel_capacity, set_default_channel_capacity,
-
-    }, setup_teardown::{
-        start_server, stop_server,
-        get_executor_count, set_executor_count
-        
-    }, sched::{
-        get_machine_count_estimate, set_machine_count_estimate,
-        get_selector_maintenance_duration, set_selector_maintenance_duration
-    }};
-
-    pub use crate::collective::{ collective::{get_time_slice, set_time_slice,}};
+    pub use crate::scheduler::{
+        machine::{
+            and_connect, and_connect_unbounded, and_connect_with_capacity, connect,
+            connect_unbounded, connect_with_capacity, get_default_channel_capacity,
+            set_default_channel_capacity,
+        },
+        sched::{
+            get_machine_count_estimate, get_selector_maintenance_duration,
+            set_machine_count_estimate, set_selector_maintenance_duration,
+            get_machine_count,
+        },
+        executor::{get_time_slice, set_time_slice,
+        },
+        setup_teardown::{get_executor_count, set_executor_count, start_server, stop_server},
+    };
 }
-

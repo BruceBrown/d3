@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 use super::*;
 
-use crate::channel::{sender::*};
 use self::setup_teardown::*;
+use crate::channel::sender::*;
 
 ///
 /// connect, as the name implies, connects a machine into the system. Toss
@@ -13,7 +13,6 @@ use self::setup_teardown::*;
 ///     2. Create with a fixed size queue, specified by the caller of connect.
 ///     3. Create with an unbound queue size.
 ///
-
 
 ///
 /// connect creates a machine with a queue bound to a defauls size. When full,
@@ -41,8 +40,7 @@ where
 /// and_connect adds an additional instruction set and sender to the machine
 pub fn and_connect<T, P>(
     machine: &Arc<Mutex<T>>,
-) -> 
-    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
+) -> Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 where
     T: 'static
         + Machine<P>
@@ -85,10 +83,7 @@ where
 pub fn and_connect_with_capacity<T, P>(
     machine: &Arc<Mutex<T>>,
     capacity: usize,
-) ->
-    
-    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
-
+) -> Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 where
     T: 'static
         + Machine<P>
@@ -124,14 +119,11 @@ where
     (machine, sender)
 }
 
-
 ///
 /// and_connect_unbounded adds an additional instruction set and sender to the machine
 pub fn and_connect_unbounded<T, P>(
     machine: &Arc<Mutex<T>>,
-) ->
-    Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
-
+) -> Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 where
     T: 'static
         + Machine<P>
@@ -147,6 +139,9 @@ where
 
 /// This is where bounded channel defaulting is exposed. The default is picked
 /// up and used here, where it can be read and mutated.
+/// The default channel queue size. It can be changed or overridden.
+pub const CHANNEL_MAX: usize = 250;
+
 #[allow(dead_code)]
 #[allow(non_upper_case_globals)]
 pub static default_channel_max: AtomicCell<usize> = AtomicCell::new(CHANNEL_MAX);
@@ -158,3 +153,4 @@ pub fn get_default_channel_capacity() -> usize {
 pub fn set_default_channel_capacity(new: usize) {
     default_channel_max.store(new);
 }
+

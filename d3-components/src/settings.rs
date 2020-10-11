@@ -1,10 +1,9 @@
-
 extern crate config;
 extern crate serde;
 
 use config::{Config, ConfigError, Environment, File};
+use std::collections::{HashMap, HashSet};
 use std::env;
-use std::collections::{HashSet,HashMap};
 
 ///
 /// Its unfortunate that we need to make all the bits public. There's
@@ -13,16 +12,16 @@ use std::collections::{HashSet,HashMap};
 ///
 
 /// This is the top-level settings object
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Settings {
     pub dev_mode: bool,
     pub log_level: String,
     pub executor: Option<Executor>,
     pub features: HashSet<Feature>,
     pub services: HashSet<Service>,
-    pub coordinator: Vec<HashMap<Coordinator,CoordinatorVariant>>,
-    pub component: Vec<HashMap<Component,ComponentVariant>>,
-    pub additional: Vec<HashMap<Additional,AdditionalVariant>>,
+    pub coordinator: Vec<HashMap<Coordinator, CoordinatorVariant>>,
+    pub component: Vec<HashMap<Component, ComponentVariant>>,
+    pub additional: Vec<HashMap<Additional, AdditionalVariant>>,
 }
 
 /// This names all of the feature toggles
@@ -109,7 +108,6 @@ pub enum Field {
 /// a more general solution would be to use a variant rather than usize
 pub type FieldMap = HashMap<Field, usize>;
 
-
 /// We don't want to mess with other variants while experimenting
 #[derive(Debug, Deserialize, Clone, Eq, PartialEq)]
 #[serde(untagged)]
@@ -152,7 +150,7 @@ impl Settings {
 }
 
 // Hopefully, most components will fit into this model
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SimpleConfig {
     pub enabled: bool,
     pub kv: Option<HashMap<String, String>>,
@@ -160,7 +158,7 @@ pub struct SimpleConfig {
 impl SimpleConfig {
     pub fn from(v: &ComponentVariant) -> Self {
         match v.clone() {
-            ComponentVariant::SimpleConfig{ enabled, kv } => Self { enabled, kv },
+            ComponentVariant::SimpleConfig { enabled, kv } => Self { enabled, kv },
         }
     }
 }

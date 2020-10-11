@@ -1,10 +1,21 @@
 [package]
 name = "d3"
+# When publishing a new version:
+# - Update CHANGELOG.md
+# - Update README.md
+# - Create "d3-X.Y.Z" git tag
 version = "0.1.0"
 authors = ["Bruce Brown <bruce_brown_1207@yahoo.com>"]
 edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/BruceBrown/d3"
+homepage = "https://github.com/BruceBrown/d3"
+#documentation = "https://docs.rs/d3"
+description = "A framework for server development"
+keywords = ["non-blocking", "server"]
+categories = ["concurrency", "server", "framework"]
+exclude = ["/ci/*", "/bors.toml"]
 
 ## cargo clippy --all -- -W clippy::all -W clippy::pedantic -W clippy::restriction -W clippy::nursery -D warnings
 
@@ -26,27 +37,45 @@ debug = false
 debug-assertions = false
 overflow-checks = false
 lto = true
-panic = 'unwind'
 incremental = false
 codegen-units = 16
 rpath = false
 
+[[bench]]
+name = "forwarder"
+harness = false
+
 [dependencies]
-crossbeam = "0.7.3"
-crossbeam-channel = "0.4.4"
-smart-default = "0.6.0"
-atomic_refcell = "0.1.6"
-log = "0.4.11"
-simplelog = "0.8.0"
-rand = "0.7.3"
+crossbeam = "0.7"
+crossbeam-channel = "0.4"
+smart-default = "0.6"
+atomic_refcell = "0.1"
+log = "0.4"
+simplelog = "0.8"
+rand = "0.7"
 
 d3-core = {version = "0.1.0", path = "./d3-core"}
+d3-derive = {version = "0.1.0", path = "./d3-derive"}
 d3-components =  {version = "0.1.0", path = "./d3-components"}
-echo-server = {version = "0.1.0", path = "./echo-server"}
-chat-server = {version = "0.1.0", path = "./chat-server"}
-d3-dev-instruction-sets = {version = "0.1.0", path = "./d3-dev-instruction-sets"}
+echo-service = {version = "0.1.0", path = "./echo-service"}
+chat-service = {version = "0.1.0", path = "./chat-service"}
+
 
 [dev-dependencies]
+criterion = "0.3"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 
-d3-derive = {version = "0.1.0", path = "./d3-derive"}
+d3-dev-instruction-sets = {version = "0.1.0", path = "./d3-dev-instruction-sets"}
+d3-test-drivers = {version = "0.1.0", path = "./d3-test-drivers"}
+
+[workspace]
+members = [
+ "d3-core",
+ "d3-derive",
+ "d3-dev-instruction-sets",
+ "d3-components",
+ "chat-service",
+ "echo-service",
+ "d3-test-server",
+ "d3-test-drivers",
+]

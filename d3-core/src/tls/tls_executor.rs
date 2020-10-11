@@ -1,5 +1,5 @@
-use super::*;
 use self::collective::*;
+use super::*;
 ///
 /// This is the TLS data for the executor. It is used by the channel and the executor;
 /// Otherwise, this would be much higher in the stack.
@@ -9,6 +9,11 @@ pub struct Task {
     pub start: Instant,
     pub machine: ShareableMachine,
 }
+impl Task {
+    pub fn new(machine: &ShareableMachine) -> Self {
+        Self { start: std::time::Instant::now(), machine: Arc::clone(machine) }
+    }
+}
 
 /// A task for the scheduler, which will reschedule the machine
 pub struct SchedTask {
@@ -17,13 +22,16 @@ pub struct SchedTask {
 }
 impl SchedTask {
     pub fn new(machine_key: usize) -> Self {
-        Self { start: Instant::now(), machine_key }
+        Self {
+            start: Instant::now(),
+            machine_key,
+        }
     }
 }
 
 /// Executor statistics.
 /// It lives here due to the ShareableMachine having it in a method signature
-#[derive(Copy,Clone,Debug, Default, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct ExecutorStats {
     pub id: usize,
     pub tasks_executed: u128,
@@ -34,7 +42,6 @@ pub struct ExecutorStats {
     pub recv_time: std::time::Duration,
     pub time_on_queue: std::time::Duration,
 }
-
 
 ///
 /// The state of the executor
@@ -68,10 +75,14 @@ pub struct SharedCollectiveSenderAdapter {
 }
 impl SharedCollectiveSenderAdapter {
     /// Get the id of the sending machine
-    pub const fn get_id(&self) -> Uuid { self.id }
+    pub const fn get_id(&self) -> Uuid {
+        self.id
+    }
     /// Get the key of the sending machine
-    pub fn get_key(&self) -> usize { self.key }
-     /// Try to send the message
+    pub fn get_key(&self) -> usize {
+        self.key
+    }
+    /// Try to send the message
     pub fn try_send(&mut self) -> Result<(), TrySendError> {
         self.normalized_adapter.try_send()
     }
@@ -87,7 +98,6 @@ pub trait CollectiveSenderAdapter {
 }
 pub type CommonCollectiveSenderAdapter = Box<dyn CollectiveSenderAdapter>;
 
-
 /// This is information that the executor thread shares with the worker, allowing
 /// the big executor insight into what the executor is up to.
 #[derive(Debug)]
@@ -96,20 +106,33 @@ pub struct SharedExecutorInfo {
     start_idle: Instant,
 }
 impl SharedExecutorInfo {
-    pub fn set_idle(&mut self) -> Instant { self.start_idle = Instant::now(); self.start_idle }
-    pub fn set_state(&mut self, new: ExecutorState) { self.state = new }
-    pub fn get_state(&self) -> ExecutorState { self.state }
+    pub fn set_idle(&mut self) -> Instant {
+        self.start_idle = Instant::now();
+        self.start_idle
+    }
+    pub fn set_state(&mut self, new: ExecutorState) {
+        self.state = new
+    }
+    pub fn get_state(&self) -> ExecutorState {
+        self.state
+    }
     pub fn compare_set_state(&mut self, old: ExecutorState, new: ExecutorState) {
-        if self.state == old { self.state = new }
+        if self.state == old {
+            self.state = new
+        }
     }
     pub fn get_state_and_elapsed(&self) -> (ExecutorState, Duration) {
         (self.state, self.start_idle.elapsed())
     }
 }
 impl Default for SharedExecutorInfo {
-    fn default() -> Self { Self { state: ExecutorState::Init, start_idle: Instant::now( )}}
+    fn default() -> Self {
+        Self {
+            state: ExecutorState::Init,
+            start_idle: Instant::now(),
+        }
+    }
 }
-
 
 ///
 /// ExecutorData is TLS for the executor. Among other things, it provides bridging
@@ -126,14 +149,16 @@ pub struct ExecutorData {
 }
 impl ExecutorData {
     pub fn block_or_continue() {
-        tls_executor_data.with(|t|{
+        tls_executor_data.with(|t| {
             let mut tls = t.borrow_mut();
             // main thread can always continue and block
-            if tls.id == 0 { return }
+            if tls.id == 0 {
+                return;
+            }
             if let ExecutorDataField::Machine(machine) = &tls.machine {
                 if machine.state.get() != CollectiveState::Running {
                     tls.recursive_block();
-                }   
+                }
             }
         });
     }
@@ -145,7 +170,11 @@ impl ExecutorData {
         // here, to continue, having sent the one that blocked it
 
         // if running, change to drain
-        self.shared_info.lock().as_mut().unwrap().compare_set_state(ExecutorState::Running, ExecutorState::Drain);
+        self.shared_info
+            .lock()
+            .as_mut()
+            .unwrap()
+            .compare_set_state(ExecutorState::Running, ExecutorState::Drain);
         self.drain();
         let mut mutable = self.shared_info.lock().unwrap();
         // when drain returns, set back to running and reset idle
@@ -160,7 +189,10 @@ impl ExecutorData {
         if adapter.state.get() == CollectiveState::SendBlock {
             // if we are already SendBlock, then there is send looping within the
             // machine, and we need to use caution
-            log::info!("Executor {} detected recursive send block, this should not happen", self.id);
+            log::info!(
+                "Executor {} detected recursive send block, this should not happen",
+                self.id
+            );
             unreachable!("block_or_continue() should be called to prevent entering sender_blocked with a blocked machine")
         } else {
             // otherwise we can stack the incomplete send. Depth is a concern.
@@ -177,10 +209,11 @@ impl ExecutorData {
         let (machine_key, machine_state) = match &self.machine {
             ExecutorDataField::Machine(machine) => (machine.key, machine.state.clone()),
             _ => panic!("machine field was not set prior to running"),
-        }; 
+        };
         while !self.blocked_senders.is_empty() {
             self.shared_info.lock().as_mut().unwrap().set_idle();
-            let mut still_blocked: Vec::<SharedCollectiveSenderAdapter> = Vec::with_capacity(self.blocked_senders.len());
+            let mut still_blocked: Vec<SharedCollectiveSenderAdapter> =
+                Vec::with_capacity(self.blocked_senders.len());
             let mut handled_recursive_sender = false;
             for mut sender in self.blocked_senders.drain(..) {
                 match sender.try_send() {
@@ -189,15 +222,15 @@ impl ExecutorData {
                         backoff.reset();
                         machine_state.set(CollectiveState::Running);
                         handled_recursive_sender = true;
-                    },
+                    }
                     Err(TrySendError::Disconnected) if sender.key == machine_key => {
                         backoff.reset();
                         machine_state.set(CollectiveState::Running);
                         handled_recursive_sender = true;
-                    },
+                    }
                     // handle all others
                     Ok(()) => {
-                        backoff.reset(); 
+                        backoff.reset();
                         // let the scheduler know that this machine can now be scheduled
                         match &self.notifier {
                             ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.key),
@@ -205,35 +238,44 @@ impl ExecutorData {
                         };
                     }
                     Err(TrySendError::Disconnected) => {
-                        backoff.reset(); 
+                        backoff.reset();
                         // let the scheduler know that this machine can now be scheduled
                         match &self.notifier {
                             ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.key),
                             _ => log::error!("can't notify scheduler!!!"),
-                        }; 
-                    },
-                    Err(TrySendError::Full) => {still_blocked.push(sender);},
+                        };
+                    }
+                    Err(TrySendError::Full) => {
+                        still_blocked.push(sender);
+                    }
                 }
             }
             self.blocked_senders = still_blocked;
-            if handled_recursive_sender { break }
+            if handled_recursive_sender {
+                break;
+            }
             // if we haven't worked out way free, then we need to notify that we're kinda stuck
             // even though we've done that, we may yet come free. As long as we're not told to
             // terminate, we'll keep running.
-            if backoff.is_completed() && self.shared_info.lock().unwrap().get_state() != ExecutorState::Parked {
+            if backoff.is_completed()
+                && self.shared_info.lock().unwrap().get_state() != ExecutorState::Parked
+            {
                 // we need to notify the monitor that we're essentially dead.
-                self.shared_info.lock().as_mut().unwrap().set_state(ExecutorState::Parked);
+                self.shared_info
+                    .lock()
+                    .as_mut()
+                    .unwrap()
+                    .set_state(ExecutorState::Parked);
                 match &self.notifier {
                     ExecutorDataField::Notifier(obj) => obj.notify_parked(self.id),
                     _ => log::error!("Executor {} doesn't have a notifier", self.id),
-                };        
+                };
             }
             backoff.snooze();
         }
         log::debug!("drained recursive sender, allowing send to continue");
     }
 }
-
 
 /// Encoding the structs as a variant allows it to be stored in the TLS as a field.
 #[derive(SmartDefault)]
@@ -253,13 +295,10 @@ pub trait ExecutorNotifier: Send + Sync + 'static {
 }
 pub type ExecutorNotifierObj = std::sync::Arc<dyn ExecutorNotifier>;
 
-
 thread_local! {
     #[allow(non_upper_case_globals)]
     pub static tls_executor_data: RefCell<ExecutorData> = RefCell::new(ExecutorData::default());
 }
-
-
 
 #[cfg(test)]
 mod tests {

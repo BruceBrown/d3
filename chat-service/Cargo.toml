@@ -1,0 +1,23 @@
+[package]
+name = "chat-service"
+version = "0.1.0"
+authors = ["Bruce Brown <bruce_brown_1207@yahoo.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+crossbeam = "0.7"
+crossbeam-channel = "0.4"
+smart-default = "0.6"
+atomic_refcell = "0.1"
+log = "0.4"
+uuid = { version = "0.8", default-features = false, features = ["v4"] }
+
+d3-core = {version = "0.1.0", path = "../d3-core"}
+d3-derive = {version = "0.1.0", path = "../d3-derive"}
+d3-components = {version = "0.1.0", path = "../d3-components"}
+
+[dev-dependencies]
+simplelog = "0.8"

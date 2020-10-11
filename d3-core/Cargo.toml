@@ -7,17 +7,17 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-crossbeam = "0.7.3"
-crossbeam-channel = "0.4.4"
-smart-default = "0.6.0"
-atomic_refcell = "0.1.6"
-log = "0.4.11"
+crossbeam = "0.7"
+crossbeam-channel = "0.4"
+smart-default = "0.6"
+atomic_refcell = "0.1"
+log = "0.4"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
-slab = "0.4.2"
-indexmap = "1.6.0"
-fnv = "1.0.1"
+slab = "0.4"
+indexmap = "1.6"
+fnv = "1.0"
 
 [dev-dependencies]
-simplelog = "0.8.0"
+simplelog = "0.8"
 
 d3-derive = {version = "0.1.0", path = "../d3-derive"}

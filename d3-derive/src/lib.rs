@@ -76,7 +76,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         impl std::fmt::Debug for #adapter_ident {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "#adapter_ident {{ .. }}")
-            }        
+            }
         }
         // This is the generic adapter implementation for the adapter, much of this is
         // already generic, so maybe there's an alternative where the dyn stuff can
@@ -104,7 +104,10 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-            fn receive_cmd(&self, state: &MachineState, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
+            fn receive_cmd(&self, state: &MachineState, once: bool, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
+                if once {
+                    self.machine.connected();
+                }
                 if state.get() == CollectiveState::Disconnected {
                     state.set(CollectiveState::Running);
                     self.machine.disconnected();

@@ -1,6 +1,5 @@
+use self::{executor::*, overwatch::*, traits::*};
 use super::*;
-use self::{traits::*, executor::*, overwatch::*};
-
 
 ///
 /// A bit of an explanation is needed here. The server state and server struct live in
@@ -11,7 +10,7 @@ use self::{traits::*, executor::*, overwatch::*};
 /// The server is an AtomicRefCell, and its fields all come from the ServerField enum.
 /// This allows for something the compiler is happy with, while at the same time providing
 /// a decent structure for when the server is running.
-/// 
+///
 
 #[allow(non_upper_case_globals)]
 static server_state: AtomicCell<ServerState> = AtomicCell::new(ServerState::Stopped);
@@ -60,7 +59,6 @@ impl Server {
     }
 }
 
-
 /// start the server
 pub fn start_server() {
     // startup consists of several phases. The first is collecting assest from
@@ -92,9 +90,15 @@ pub fn stop_server() {
     log::info!("stopping server");
     server_state.store(ServerState::Stopping);
 
-    if let ServerField::Executor(executor) = &server.borrow().executor { executor.stop() }
-    if let ServerField::Scheduler(scheduler) = &server.borrow().scheduler { scheduler.stop() }
-    if let ServerField::Monitor(monitor) = &server.borrow().monitor { monitor.stop() }
+    if let ServerField::Executor(executor) = &server.borrow().executor {
+        executor.stop()
+    }
+    if let ServerField::Scheduler(scheduler) = &server.borrow().scheduler {
+        scheduler.stop()
+    }
+    if let ServerField::Monitor(monitor) = &server.borrow().monitor {
+        monitor.stop()
+    }
 
     let mut s = server.borrow_mut();
     s.scheduler = ServerField::Uninitialized;
@@ -121,13 +125,12 @@ pub fn set_executor_count(new: usize) {
     executor_count.store(new);
 }
 
-
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use std::panic;
-    use simplelog::*;
     use crate::scheduler::sched::set_selector_maintenance_duration;
+    use simplelog::*;
+    use std::panic;
 
     // common function for wrapping a test with setup/teardown logic
     pub fn run_test<T>(test: T) -> ()
@@ -135,12 +138,15 @@ pub mod tests {
         T: FnOnce() -> () + panic::UnwindSafe,
     {
         // install a simple logger
-        CombinedLogger::init(
-            vec![TermLogger::new(LevelFilter::Trace, Config::default(), TerminalMode::Mixed)]
-            ).unwrap();
+        CombinedLogger::init(vec![TermLogger::new(
+            LevelFilter::Error,
+            Config::default(),
+            TerminalMode::Mixed,
+        )])
+        .unwrap();
         // tweaks for more responsive testing
         set_selector_maintenance_duration(std::time::Duration::from_millis(20));
-        
+
         setup();
 
         let result = panic::catch_unwind(|| test());
@@ -162,7 +168,7 @@ pub mod tests {
     #[test]
     fn test_stop() {
         run_test(|| {
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            std::thread::sleep(std::time::Duration::from_millis(50));
         });
     }
 }

@@ -1,5 +1,5 @@
+use self::traits::*;
 use super::*;
-use self::{traits::*};
 
 type MonitorReceiver = crossbeam::Receiver<MonitorMessage>;
 
@@ -50,7 +50,7 @@ impl SystemMonitor {
 
     /// Stop the system monitor. Late stopping is recommended.
     fn stop(&self) {
-        if self.sender.send(MonitorMessage::Terminate).is_err(){}
+        if self.sender.send(MonitorMessage::Terminate).is_err() {}
     }
 }
 
@@ -64,7 +64,7 @@ impl MonitorControl for SystemMonitor {
 /// If we haven't done so already, attempt to stop the system monitor thread
 impl Drop for SystemMonitor {
     fn drop(&mut self) {
-         if let Some(thread) = self.thread.take() {
+        if let Some(thread) = self.thread.take() {
             if self.sender.send(MonitorMessage::Terminate).is_err() {}
             log::info!("synchronizing system monitor shutdown");
             if thread.join().is_err() {
@@ -100,7 +100,7 @@ impl ThreadData {
             match self.receiver.recv() {
                 Err(_e) => break,
                 Ok(m) => match m {
-                    MonitorMessage::ExecutorStats(_stats) => {  }
+                    MonitorMessage::ExecutorStats(_stats) => {}
                     MonitorMessage::Terminate => break,
                     MonitorMessage::Parked(id) => {
                         log::info!("System Monitor: Executor {} is parked", id);

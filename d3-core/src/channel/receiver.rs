@@ -1,13 +1,14 @@
+use self::connection::*;
 use super::*;
-use crossbeam::{TryRecvError, RecvError, RecvTimeoutError};
-use self::{connection::*};
+use crossbeam::{RecvError, RecvTimeoutError, TryRecvError};
 
 ///
 /// The Receiver is a wrapper aruond the Crossbeam receiver. It
 /// intentionally limits the surface of the receiver. Much of this
 /// is just boilerplate wrapping
 pub struct Receiver<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
     channel_id: usize,
     connection: ThreadSafeConnection,
@@ -15,7 +16,8 @@ where T: MachineImpl
 }
 
 impl<T> Receiver<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
     pub fn clone_receiver(&self) -> crossbeam::Receiver<T> {
         self.receiver.clone()
@@ -32,7 +34,7 @@ where T: MachineImpl
         self.receiver.recv()
     }
 
-    pub fn recv_timeout(&self, timeout: std::time::Duration,) -> Result<T, RecvTimeoutError> {
+    pub fn recv_timeout(&self, timeout: std::time::Duration) -> Result<T, RecvTimeoutError> {
         self.receiver.recv_timeout(timeout)
     }
 
@@ -62,7 +64,8 @@ where T: MachineImpl
 }
 
 impl<T> Clone for Receiver<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
     fn clone(&self) -> Self {
         Self {
@@ -74,7 +77,8 @@ where T: MachineImpl
 }
 
 impl<T> fmt::Debug for Receiver<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.receiver.fmt(f)
@@ -82,7 +86,8 @@ where T: MachineImpl
 }
 
 impl<T> PartialEq for Receiver<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
     fn eq(&self, other: &Self) -> bool {
         self.channel_id == other.channel_id && self.receiver.same_channel(&other.receiver)
@@ -96,7 +101,8 @@ pub fn wrap_receiver<T>(
     channel_id: usize,
     connection: ThreadSafeConnection,
 ) -> Receiver<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
     Receiver::<T> {
         channel_id,

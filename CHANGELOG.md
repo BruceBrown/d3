@@ -1,4 +1,9 @@
 # d3 -- Revision History
+
+## More Cleanup and Reorg
+Added integration tests and benches. Move Forwarder, DaisyChain, FaninFanout and ChaosMonkey into their own area; d3-test-driver. Where they can be referenced by benches and tests. Move the test server from /src to d3-test-server, which seems like a more fitting place.
+Cleaned up some stuff pointed out by clippy. Ran fmt on everything... some things it does I just don't like, but all in all its a boon. Went through the various inline tests and removed or cleaned them up. Need to make a pass over the internal docs and see if I can improve them to the point of being worth the trouble to read. Renamed chat-server and echo-server to chat-service and echo-server. Certainly, they could be called servers, but they also coexist in a server, so service seems like a more appropriate tagline.
+
 ## Chaos Monkey Added to Forwarder for Testing
 The daisy-chain test is essentially a pulse wave though all the machine.
 The fanout-fanin test is a single shock wave to the fanin, where many of the fanout will block on send.

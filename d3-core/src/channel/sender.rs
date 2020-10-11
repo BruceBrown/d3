@@ -1,7 +1,6 @@
+use self::connection::*;
 use super::*;
-use crossbeam::{TrySendError, SendError, SendTimeoutError};
-use self::{connection::*};
-
+use crossbeam::{SendError, SendTimeoutError, TrySendError};
 
 ///
 /// Wrap the crossbeam sender to allow the executor to handle a block.
@@ -14,17 +13,19 @@ use self::{connection::*};
 /// Otherwise, the Sender is a wrapper aruond the Crossbeam sender. It
 /// intentionally limits the surface of the sender. Much of this
 /// is just boilerplate wrapping
-pub struct Sender<T: MachineImpl>
-{
+pub struct Sender<T: MachineImpl> {
     channel_id: usize,
     connection: ThreadSafeConnection,
     pub sender: crossbeam::Sender<T>,
 }
 
 impl<T> Sender<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
-    pub fn get_id(&self) -> usize { self.channel_id }
+    pub fn get_id(&self) -> usize {
+        self.channel_id
+    }
     pub fn try_send(&self, msg: T) -> Result<(), TrySendError<T>> {
         self.sender.try_send(msg)
     }
@@ -34,7 +35,8 @@ where T: MachineImpl
     }
 
     pub fn send(&self, msg: T) -> Result<(), SendError<T>>
-    where T: MachineImpl + MachineImpl<InstructionSet = T> + std::fmt::Debug,
+    where
+        T: MachineImpl + MachineImpl<InstructionSet = T> + std::fmt::Debug,
     {
         // this could be a series of sends from a machine, which is already
         // blocked. Need to check if that is the case, otherwise this send
@@ -43,17 +45,23 @@ where T: MachineImpl
         match self.sender.try_send(msg) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(instruction)) => {
-                log::debug!("parking sender {} with cmd {:#?}", self.channel_id, instruction);
-                match <T as MachineImpl>::park_sender(self.channel_id,
+                log::debug!(
+                    "parking sender {} with cmd {:#?}",
+                    self.channel_id,
+                    instruction
+                );
+                match <T as MachineImpl>::park_sender(
+                    self.channel_id,
                     self.sender.clone() as crossbeam::Sender<<T as MachineImpl>::InstructionSet>,
-                    instruction) {
+                    instruction,
+                ) {
                     Ok(()) => Ok(()),
                     Err(m) => {
                         log::warn!("blocking main thread on send");
                         self.sender.send(m)
-                    },
+                    }
                 }
-            },
+            }
             Err(TrySendError::Disconnected(m)) => Err(SendError(m)),
         }
     }
@@ -64,7 +72,10 @@ where T: MachineImpl
         timeout: std::time::Duration,
     ) -> Result<(), SendTimeoutError<T>> {
         if self.sender.is_full() {
-            log::warn!("Sender: channel is full, send_timeout will block for {:#?}", timeout);
+            log::warn!(
+                "Sender: channel is full, send_timeout will block for {:#?}",
+                timeout
+            );
         }
         self.sender.send_timeout(msg, timeout)
     }
@@ -87,7 +98,8 @@ where T: MachineImpl
 }
 
 impl<T> fmt::Debug for Sender<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.sender.fmt(f)
@@ -95,35 +107,38 @@ where T: MachineImpl
 }
 
 impl<T> Clone for Sender<T>
-where T: MachineImpl,
+where
+    T: MachineImpl,
 {
     fn clone(&self) -> Self {
         Self {
             channel_id: self.channel_id,
             connection: self.connection.clone(),
             sender: self.sender.clone(),
-
         }
     }
 }
 
 impl<T> PartialEq for Sender<T>
-where T: MachineImpl
+where
+    T: MachineImpl,
 {
     fn eq(&self, other: &Self) -> bool {
         self.channel_id == other.channel_id && self.sender.same_channel(&other.sender)
     }
 }
 
-impl<T> Eq for Sender<T> where T: MachineImpl, {}
+impl<T> Eq for Sender<T> where T: MachineImpl {}
 
 pub fn wrap_sender<T>(
     sender: crossbeam::Sender<T>,
     channel_id: usize,
     connection: ThreadSafeConnection,
 ) -> Sender<T>
-where T: MachineImpl,
-{   Sender::<T> {
+where
+    T: MachineImpl,
+{
+    Sender::<T> {
         channel_id,
         connection,
         sender,

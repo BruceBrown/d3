@@ -1,9 +1,19 @@
-
+use self::traits::*;
 use super::*;
 use crossbeam::deque;
-use self::{traits::*};
 
 const WORKER_MESSAGE_QUEUE_COUNT: usize = 10;
+
+
+/// The timeslice given to receive_cmd, allowing it to recv multiple commands
+static TIMESLICE_IN_MILLIS: AtomicCell<usize> = AtomicCell::new(20);
+
+pub fn get_time_slice() -> std::time::Duration {
+    std::time::Duration::from_millis(TIMESLICE_IN_MILLIS.load() as u64)
+}
+pub fn set_time_slice(new: std::time::Duration) {
+    TIMESLICE_IN_MILLIS.store(new.as_millis() as usize)
+}
 
 ///
 /// Unlike most of the system, which uses u128 ids, the executor uses usize. If atomic u128 were
@@ -69,7 +79,6 @@ fn find_task<T>(
     })
 }
 
-
 /// The notifier
 struct Notifier {
     monitor: MonitorSender,
@@ -78,9 +87,11 @@ struct Notifier {
 }
 impl ExecutorNotifier for Notifier {
     fn notify_parked(&self, executor_id: usize) {
-        if self.monitor
+        if self
+            .monitor
             .send(MonitorMessage::Parked(executor_id))
-            .is_err(){};
+            .is_err()
+        {};
     }
     fn notify_can_schedule(&self, machine_key: usize) {
         self.wait_queue.push(SchedTask::new(machine_key));
@@ -122,7 +133,6 @@ impl ThreadData {
         stealers
     }
 
-
     // This is the executor thread. It has a few responsibilites. It listens for,
     // and acts upon events (via channel). It complete senders that are blocked.
     // It gets tasks and runs them. It might be better to have a select
@@ -138,14 +148,16 @@ impl ThreadData {
             let time_slice = get_time_slice();
             loop {
                 // report to the system monitor, maybe look at fixing drift
-                if last_stats_time.elapsed().as_millis() > 1000*60*5 {
-                    self.monitor
+                if last_stats_time.elapsed().as_millis() > 1000 * 60 * 5 {
+                    if self.monitor
                         .send(MonitorMessage::ExecutorStats(stats))
-                        .unwrap();
+                        .is_err(){}
                     last_stats_time = std::time::Instant::now();
                 }
                 // processs any received commands, break out of loop if told to terminate
-                if self.try_recv() { break }
+                if self.try_recv() {
+                    break;
+                }
                 // move blocked senders along...
                 self.try_completing_send(&mut stats);
                 // try to run a task
@@ -156,7 +168,9 @@ impl ThreadData {
                         let tls = t.borrow();
                         tls.blocked_senders.is_empty()
                     });
-                    if is_empty { break }
+                    if is_empty {
+                        break;
+                    }
                 }
             }
             log::debug!("executor {} is done", self.id);
@@ -172,8 +186,15 @@ impl ThreadData {
                 }
             });
             // as a last and final, tell the monitor that we're dead...
-            if self.monitor.send(MonitorMessage::Terminated(self.id)).is_err() {
-                log::warn!("executor {} exiting without informing system monitor", self.id);
+            if self
+                .monitor
+                .send(MonitorMessage::Terminated(self.id))
+                .is_err()
+            {
+                log::warn!(
+                    "executor {} exiting without informing system monitor",
+                    self.id
+                );
             }
         });
         Some(thread)
@@ -198,11 +219,19 @@ impl ThreadData {
             tls.id = self.id;
             tls.shared_info = Arc::clone(&self.shared_info);
             tls.notifier = ExecutorDataField::Notifier(Arc::new(notifier));
-        });            
+        });
         // pull out some commonly used stuff
         self.stealers = self.build_stealers();
-        log::debug!("executor {} running with {} stealers", self.id, self.stealers.len());
-        self.shared_info.lock().as_mut().unwrap().set_state(ExecutorState::Running);
+        log::debug!(
+            "executor {} running with {} stealers",
+            self.id,
+            self.stealers.len()
+        );
+        self.shared_info
+            .lock()
+            .as_mut()
+            .unwrap()
+            .set_state(ExecutorState::Running);
     }
 
     // check the channel, return true to quit.
@@ -213,8 +242,12 @@ impl ThreadData {
             // rebuild if we're running
             Ok(SchedCmd::RebuildStealers) if self.get_state() == ExecutorState::Running => {
                 self.stealers = self.build_stealers();
-                log::debug!("executor {} rebuild stealers, running with {} stealers", self.id, self.stealers.len());
-            },
+                log::debug!(
+                    "executor {} rebuild stealers, running with {} stealers",
+                    self.id,
+                    self.stealers.len()
+                );
+            }
             // ignore rebuilds when not running
             Ok(SchedCmd::RebuildStealers) => (),
             Ok(_) => log::warn!("executor received unexpected message"),
@@ -239,11 +272,11 @@ impl ThreadData {
                     match sender.try_send() {
                         Ok(()) => {
                             self.wait_queue.push(SchedTask::new(sender.get_key()));
-                        },
-                        Err(TrySendError::Disconnected) => {},
+                        }
+                        Err(TrySendError::Disconnected) => {}
                         Err(TrySendError::Full) => {
                             still_blocked.push(sender);
-                        },
+                        }
                     };
                 }
                 tls.blocked_senders = still_blocked;
@@ -252,31 +285,42 @@ impl ThreadData {
         });
     }
 
-    // if we're stull running, run get a task and run it. If no tasks, yeild
+    // if we're still running, run get a task and run it. If no tasks, yeild
     fn run_task(&mut self, time_slice: Duration, stats: &mut ExecutorStats) {
         if self.get_state() == ExecutorState::Running {
-            if let Some(task) = find_task(&self.work, &self.run_queue, &self.stealers) {
-                stats.time_on_queue += task.start.elapsed();
-                let t = self.shared_info.lock().as_mut().unwrap().set_idle();
-                // setup TLS in case we have to park
-                let machine = task.machine;
-                tls_executor_data.with(|t| {
-                    let mut tls = t.borrow_mut();
-                    tls.machine = ExecutorDataField::Machine(Arc::clone(&machine))
-                });
-                machine.receive_cmd( time_slice, stats);
-                stats.recv_time += t.elapsed();
-                tls_executor_data.with(|t| {
-                    let mut tls = t.borrow_mut();
-                    tls.machine = ExecutorDataField::Uninitialized;
-                });
-                self.shared_info.lock().as_mut().unwrap().set_idle();
-                self.reschedule(machine);
-                if self.shared_info.lock().unwrap().get_state() == ExecutorState::Parked {
-                    log::debug!("parked executor {} completed", self.id);
+            loop {
+                if let Some(task) = find_task(&self.work, &self.run_queue, &self.stealers) {
+                    if task.machine.get_state() == CollectiveState::Dead {
+                        // if its a dead task, we need to just drop it and get something else to work on
+                        drop(task);
+                        sched::live_machine_count.fetch_sub(1, Ordering::SeqCst);
+                    } else {
+                        stats.time_on_queue += task.start.elapsed();
+                        let t = self.shared_info.lock().as_mut().unwrap().set_idle();
+                        // setup TLS in case we have to park
+                        let machine = task.machine;
+                        tls_executor_data.with(|t| {
+                            let mut tls = t.borrow_mut();
+                            tls.machine = ExecutorDataField::Machine(Arc::clone(&machine))
+                        });
+                        machine.receive_cmd(time_slice, stats);
+                        stats.recv_time += t.elapsed();
+                        tls_executor_data.with(|t| {
+                            let mut tls = t.borrow_mut();
+                            tls.machine = ExecutorDataField::Uninitialized;
+                        });
+                        self.shared_info.lock().as_mut().unwrap().set_idle();
+                        self.reschedule(machine);
+                        if self.shared_info.lock().unwrap().get_state() == ExecutorState::Parked {
+                            log::debug!("parked executor {} completed", self.id);
+                        }
+                        // since we did a bunch of work we can leave
+                        break;
+                    }
+                } else {
+                    std::thread::yield_now();
+                    break;
                 }
-            } else {
-                std::thread::yield_now();
             }
         }
     }
@@ -284,11 +328,16 @@ impl ThreadData {
     #[inline]
     fn reschedule(&self, machine: ShareableMachine) {
         let cmd = match machine.state.get() {
-            CollectiveState::Running => {self.wait_queue.push(SchedTask::new(machine.key)); return},
+            CollectiveState::Running => {
+                self.wait_queue.push(SchedTask::new(machine.key));
+                return;
+            }
             CollectiveState::Dead => SchedCmd::Remove(machine.key),
-            _ => return
+            _ => return,
         };
-        if self.scheduler.send(cmd).is_err() { log::info!("failed to send cmd to scheduler") }
+        if self.scheduler.send(cmd).is_err() {
+            log::info!("failed to send cmd to scheduler")
+        }
     }
 }
 
@@ -399,9 +448,9 @@ impl Executor {
         // protect ourself from re-entry
         let _guard = self.barrier.lock().unwrap();
         // dump state of all workers
-        self.workers.read().unwrap().iter().for_each(|(_,v)| {
+        self.workers.read().unwrap().iter().for_each(|(_, v)| {
             let (state, elapsed) = v.get_state_and_elapsed();
-            log::debug!("worker {} {:#?} {:#?}", v.id, state, elapsed )
+            log::debug!("worker {} {:#?} {:#?}", v.id, state, elapsed)
         });
 
         if let Some(worker) = self.workers.read().unwrap().get(&id) {
@@ -411,10 +460,17 @@ impl Executor {
                 match worker.stealer.steal() {
                     deque::Steal::Empty => break,
                     deque::Steal::Retry => (),
-                    deque::Steal::Success(task) => { count += 1; self.run_queue.push(task) },
+                    deque::Steal::Success(task) => {
+                        count += 1;
+                        self.run_queue.push(task)
+                    }
                 }
             }
-            log::debug!("stole back {} tasks queue is_empty() = {}", count, self.run_queue.is_empty());
+            log::debug!(
+                "stole back {} tasks queue is_empty() = {}",
+                count,
+                self.run_queue.is_empty()
+            );
         }
 
         if let Some(worker) = self.workers.write().unwrap().remove(&id) {
@@ -455,7 +511,7 @@ impl Executor {
             .read()
             .unwrap()
             .iter()
-            .for_each(|w| if w.1.sender.send(SchedCmd::RebuildStealers).is_err(){});
+            .for_each(|w| if w.1.sender.send(SchedCmd::RebuildStealers).is_err() {});
     }
 
     // create a new worker and executor
@@ -507,7 +563,7 @@ impl ExecutorControl for Executor {
     fn parked_executor(&self, id: usize) {
         self.parked_executor(id);
     }
-    
+
     /// notifies the executor that an executor completed and can be joined
     fn joinable_executor(&self, id: usize) {
         self.joinable_executor(id);
@@ -532,7 +588,7 @@ impl Drop for Executor {
         log::info!("synchronizing worker thread shutdown");
         for w in self.workers.write().unwrap().iter_mut() {
             if let Some(thread) = w.1.thread.take() {
-                if thread.join().is_err(){}
+                if thread.join().is_err() {}
             }
         }
         log::info!("dropped thread pool");
@@ -542,37 +598,11 @@ impl Drop for Executor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fmt;
     use std::thread;
     use std::time::Duration;
-    
-    use self::channel::{channel::{channel, channel_with_capacity},
-        sender::Sender, receiver::Receiver
-    };
 
-
-    use self::overwatch::{SystemMonitorFactory};
+    use self::overwatch::SystemMonitorFactory;
     use self::sched_factory::create_sched_factory;
-    use self::setup_teardown::tests::run_test;
-    
-    use d3_derive::*;
-
-    #[allow(dead_code)]
-    #[derive(Debug, Clone, Eq, PartialEq, MachineImpl)]
-    pub enum TestMessage {
-        Test,
-        TestData(usize),
-        TestStruct(TestStruct),
-        TestCallback(Sender<TestMessage>, TestStruct),
-        AddSender(Sender<TestMessage>),
-        Notify(Sender<TestMessage>, usize),
-    }
-
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub struct TestStruct {
-    pub from_id: usize,
-    pub received_by: usize,
-}
 
     #[test]
     fn can_terminate() {
@@ -587,321 +617,4 @@ pub struct TestStruct {
         thread::sleep(Duration::from_millis(100));
     }
 
-    #[test]
-    fn can_receive() {
-        run_test(|| {
-            let f = Forwarder::default();
-            let (t, s) = machine::connect(f);
-            s.send(TestMessage::Test).unwrap();
-            thread::sleep(Duration::from_millis(40));
-            assert_eq!(t.lock().unwrap().get_and_clear_received_count(), 1);
-            assert_eq!(t.lock().unwrap().get_and_clear_received_count(), 0);
-        });
-    }
-
-    #[test]
-    fn can_callback() {
-        run_test(|| {
-            let f = Forwarder::new(1);
-            let (_t, s) = machine::connect(f);
-            let (sender, r) = channel();
-            let mut data = TestStruct::default();
-            data.from_id = 10000;
-            s.send(TestMessage::TestCallback(sender, data)).unwrap();
-            let m = r.recv_timeout(Duration::from_secs(1)).unwrap();
-            match m {
-                TestMessage::TestStruct(results) => {
-                    assert_eq!(results.from_id, data.from_id);
-                    assert_eq!(results.received_by, 1);
-                }
-                _ => assert_eq!(true, false),
-            }
-        });
-    }
-
-    #[test]
-    fn can_forward() {
-        run_test(|| {
-            let f = Forwarder::new(1);
-            let (_t, s) = machine::connect(f);
-            let (sender, r) = channel();
-            s.send(TestMessage::AddSender(sender.clone())).unwrap();
-            s.send(TestMessage::Test).unwrap();
-            let m = r.recv_timeout(Duration::from_secs(1)).unwrap();
-            assert_eq!(m, TestMessage::Test);
-        });
-    }
-
-    #[test]
-    fn can_notify() {
-        run_test(|| {
-            let f = Forwarder::new(1);
-            let (_t, s) = machine::connect(f);
-            let (sender, r) = channel();
-            s.send(TestMessage::Notify(sender.clone(), 2)).unwrap();
-            s.send(TestMessage::Test).unwrap();
-            match r.recv_timeout(Duration::from_millis(100)) {
-                Ok(_m) => panic!("notification arrived early"),
-                Err(_e) => (),
-            }
-            s.send(TestMessage::Test).unwrap();
-            match r.recv_timeout(Duration::from_secs(1)) {
-                Ok(m) => assert_eq!(m, TestMessage::TestData(2)),
-                Err(e) => panic!("unexpected error '{}' while waiting for data", e),
-            }
-        });
-    }
-
-    #[test]
-    fn can_fanout() {
-        run_test(|| {
-            let f = Forwarder::new(1);
-            let (_t, s) = machine::connect(f);
-            let (sender1, r1) = channel();
-            let (sender2, r2) = channel();
-            s.send(TestMessage::AddSender(sender1.clone())).unwrap();
-            s.send(TestMessage::AddSender(sender2.clone())).unwrap();
-            s.send(TestMessage::Test).unwrap();
-            let m = r1.recv_timeout(Duration::from_secs(1)).unwrap();
-            assert_eq!(m, TestMessage::Test);
-            let m = r2.recv_timeout(Duration::from_secs(1)).unwrap();
-            assert_eq!(m, TestMessage::Test);
-        });
-    }
-
-    #[test]
-    fn daisy_chain() {
-        // The previous tests asserted that the forward is well behaved.
-        // The scheduler and executor, while not stressed, is also well behaved.
-        // The following tests stress the executor in different ways
-
-        // the daisy chain sets up a chain of forwarders, then sends a message
-        // into the first, which should run through all the forwarders and end
-        // with a notification.
-
-        let machine_count = 100;
-        let messages = 5;
-        let iterations = 2;
-
-        run_test(|| {
-            let mut machines: Vec<TestMessageSender> = Vec::with_capacity(machine_count);
-            let mut instances: Vec<Arc<Mutex<Forwarder>>> = Vec::with_capacity(machine_count);
-            let f = Forwarder::new(1);
-            let (_f, s) = machine::connect(f);
-            instances.push(_f);
-            let first_sender = s.clone();
-            let mut last_sender = s.clone();
-            machines.push(s);
-            for idx in 2..=machine_count {
-                let (_f, s) = machine::connect(Forwarder::new(idx));
-                instances.push(_f);
-                last_sender.send(TestMessage::AddSender(s.clone())).unwrap();
-                last_sender = s.clone();
-                machines.push(s);
-            }
-            // turn the last into a notifier
-            let (sender, receiver) = channel();
-            last_sender
-                .send(TestMessage::Notify(sender.clone(), messages))
-                .unwrap();
-            for _ in 0..iterations {
-                for msg_id in 0..messages {
-                    match first_sender.try_send(TestMessage::TestData(msg_id)) {
-                        Ok(()) => (),
-                        Err(e) => match e {
-                            crossbeam::TrySendError::Full(m) => {
-                                log::info!("full");
-                                first_sender.send(m).unwrap();
-                            }
-                            crossbeam::TrySendError::Disconnected(_m) => {
-                                log::info!("disconnected");
-                            }
-                        },
-                    };
-                }
-                log::info!("sent an iteration, waiting for response");
-                match receiver.recv_timeout(Duration::from_secs(5)) {
-                    Ok(m) => {
-                        assert_eq!(m, TestMessage::TestData(messages));
-                        log::info!("an iteration completed");
-                    }
-                    Err(_) => {
-                        for forwarder in &instances {
-                            log::info!(
-                                "id {} count{}",
-                                forwarder.lock().unwrap().get_id(),
-                                forwarder.lock().unwrap().get_and_clear_received_count()
-                            );
-                        }
-                    }
-                };
-            }
-        });
-    }
-
-    #[test]
-    fn fanout_fanin() {
-        // create a machine which forwards any message it receives to all of the
-        // other machines, that's the fanout leg. Each of those machines will forward
-        // the message it receives to a single machine, that's the fanin leg.
-        //
-        // this is likely to strain the executors, as the fanin will leg will cause
-        // senders to block on the bounded queue, which has a size of 500.
-        //
-        // with 1002 machines, that 1000 messages slamming into a single machine.
-        // if a burst of 20 messages are sent, that's 20K messages flowing into
-        // a bounded pipe. The result is going to be parking of senders and the
-        // executor is going to need a means of processing other work, as it
-        // can't block on the send queue.
-        let machine_count = 100;
-        let messages = 50;
-        let iterations = 2;
-        run_test(|| {
-            let mut machines: Vec<TestMessageSender> = Vec::with_capacity(machine_count);
-            let (_f, fanout_sender) = machine::connect(Forwarder::new(1));
-            let (_f, fanin_sender) = machine::connect(Forwarder::new(2));
-
-            for idx in 3..=machine_count {
-                let (_f, s) = machine::connect(Forwarder::new(idx));
-                fanout_sender
-                    .send(TestMessage::AddSender(s.clone()))
-                    .unwrap();
-                s.send(TestMessage::AddSender(fanin_sender.clone()))
-                    .unwrap();
-                machines.push(s);
-            }
-            // turn the fanin into a notifier
-            let (sender, receiver) = channel();
-            let expect_count = (machine_count - 2) * messages;
-            fanin_sender
-                .send(TestMessage::Notify(sender.clone(), expect_count))
-                .unwrap();
-            for _ in 0..iterations {
-                for _ in 0..messages {
-                    fanout_sender.send(TestMessage::Test).unwrap();
-                }
-                let m = receiver.recv_timeout(Duration::from_secs(15)).unwrap();
-                assert_eq!(m, TestMessage::TestData(expect_count));
-                log::info!("an iteration completed");
-            }
-        });
-    }
-
-    use std::sync::Mutex;
-    type TestMessageSender = Sender<TestMessage>;
-    /// The Forwarder is the swiss army knife for tests. It can be a fanin, fanout, chain, or callback receiver.
-    /// This is a striped down forwarder, the full one is included in main. This is just enough to test that
-    /// the schduler and executor are well behaved.
-    #[derive(Default)]
-    pub struct Forwarder {
-        id: usize,
-        /// received_count is the count of messages received by this forwarder.
-        received_count: AtomicUsize,
-        /// The mutable bits...
-        mutable: Mutex<ForwarderMutable>,
-    }
-
-    #[derive(Default)]
-    pub struct ForwarderMutable {
-        /// collection of senders, each will be sent any received message.
-        senders: Vec<TestMessageSender>,
-        /// notify_count is compared against received_count for means of notifcation.
-        notify_count: usize,
-        /// notify_sender is sent a TestData message with the data being the number of messages received.
-        notify_sender: Option<TestMessageSender>,
-        /// sequencing
-        sequence: usize,
-    }
-
-    impl Forwarder {
-        pub fn new(id: usize) -> Self {
-            Self {
-                id,
-                ..Default::default()
-            }
-        }
-        pub fn get_id(&self) -> usize {
-            self.id
-        }
-        pub fn get_and_clear_received_count(&self) -> usize {
-            let received_count = self.received_count.load(Ordering::SeqCst);
-            self.received_count.store(0, Ordering::SeqCst);
-            received_count
-        }
-    }
-
-    impl Machine<TestMessage> for Forwarder {
-        fn receive(&self, message: TestMessage) {
-            // it a bit ugly, but its also a clean way to handle the data we need to access
-            let mut mutable = self.mutable.lock().unwrap();
-            // handle configuation messages without bumping counters
-            match message {
-                TestMessage::Notify(sender, on_receive_count) => {
-                    mutable.notify_sender = Some(sender.clone());
-                    mutable.notify_count = on_receive_count;
-                    return;
-                }
-                TestMessage::AddSender(sender) => {
-                    mutable.senders.push(sender.clone());
-                    return;
-                }
-                _ => (),
-            }
-            self.received_count.fetch_add(1, Ordering::SeqCst);
-            // forward the message
-            &mutable
-                .senders
-                .iter()
-                .for_each(|sender| sender.send(message.clone()).unwrap());
-            if mutable.notify_count > 0
-                && (self.received_count.load(Ordering::SeqCst) % 5000 == 0)
-            {
-                log::info!(
-                    "rcvs {} out of {}",
-                    self.received_count.load(Ordering::SeqCst),
-                    mutable.notify_count
-                );
-            }
-            // send notification if we've met the criteria
-            if self.received_count.load(Ordering::SeqCst) == mutable.notify_count
-                && mutable.notify_sender.is_some()
-            {
-                mutable
-                    .notify_sender
-                    .as_ref()
-                    .unwrap()
-                    .send(TestMessage::TestData(
-                        self.received_count.load(Ordering::SeqCst),
-                    ))
-                    .unwrap();
-                self.received_count.store(0, Ordering::SeqCst);
-            }
-            match message {
-                TestMessage::TestCallback(sender, mut test_struct) => {
-                    test_struct.received_by = self.id;
-                    sender.send(TestMessage::TestStruct(test_struct)).unwrap();
-                }
-                TestMessage::TestData(seq) => {
-                    if seq == 0 as usize {
-                        mutable.sequence = 0
-                    } else {
-                        mutable.sequence += 1;
-                        assert_eq!(seq, mutable.sequence);
-                    }
-                }
-                _ => (),
-            }
-        }
-    }
-
-    impl fmt::Display for Forwarder {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(
-                f,
-                "Forwarder {} forwarded {}",
-                self.id,
-                self.received_count.load(Ordering::SeqCst)
-            )
-        }
-    }
 }

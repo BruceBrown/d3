@@ -7,18 +7,18 @@ use crate::mio_network::new_network_factory;
 /// we're going to have to deal with networks. Afterall, the whole point of doing this is to build
 /// a server model, and what good is a server if it can't interact with the outside world. So, here
 /// we go...
-/// 
+///
 /// Mio provides the low-level notifications that the network needs servicing. We're still going to
 /// rely upon machines to perform the services. we're going to use mio as a signalling layer.
 /// Much like how we use Crossbeam select to schedule machines, we're going to use Mio polling
 /// to do the same for those few machines which facilitate communicating with the outside world.
-/// 
+///
 /// Mostly, we're porting the example. Instead of main, we'll launch a thread. We're going to forego
 /// logging, as I've got an idea for that were we have a very thin UDP logging to something else.
 /// The idea being you're goingto be in a docker kind of world, where our server should focus
 /// on handling data, and another, local server, should focus on logging and yet anotehr should focus
 /// on metrics.
-/// 
+///
 
 #[allow(non_upper_case_globals)]
 static network_state: AtomicCell<NetworkState> = AtomicCell::new(NetworkState::Stopped);
@@ -83,7 +83,9 @@ pub fn start_network() {
 /// stop the network
 pub fn stop_network() {
     network_state.store(NetworkState::Stopping);
-    if let NetworkField::Network(network_control) = &network.borrow().network_control { network_control.stop() }
+    if let NetworkField::Network(network_control) = &network.borrow().network_control {
+        network_control.stop()
+    }
 
     let mut s = network.borrow_mut();
     s.network_control = NetworkField::Uninitialized;
@@ -106,4 +108,3 @@ pub trait NetworkControl: Send + Sync {
     fn stop(&self);
 }
 pub type NetworkControlObj = Arc<dyn NetworkControl>;
-

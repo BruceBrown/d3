@@ -1,5 +1,6 @@
-use super::*;
 use self::tls_executor::*;
+use super::*;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 ///
 /// A machine has both instruction set dependent and independent structure.
@@ -12,7 +13,8 @@ use self::tls_executor::*;
 pub struct MachineAdapter {
     /// The id is assigned on creation, and is intended for to be used in logging
     id: Uuid,
-
+    /// The once flag, used for signalling connected.
+    once: AtomicBool,
     /// The key is assigned when the machine is assigned to the collective. When a
     /// machine is removed from the collective, it's key can be re-issued.
     pub key: usize,
@@ -32,21 +34,36 @@ impl MachineAdapter {
     pub fn new(adapter: Box<dyn MachineDependentAdapter>) -> Self {
         Self {
             id: uuid::Uuid::new_v4(),
+            once: AtomicBool::new(true),
             key: 0,
             state: MachineState::default(),
-            normalized_adapter: adapter
+            normalized_adapter: adapter,
         }
     }
     #[inline]
-    pub const fn get_id(&self) -> Uuid { self.id }
+    pub const fn get_id(&self) -> Uuid {
+        self.id
+    }
     #[inline]
-    pub fn get_key(&self) -> usize { self.key }
+    pub fn get_and_clear_once(&self) -> bool {
+        self.once.swap(false, Ordering::SeqCst)
+    }
     #[inline]
-    pub fn get_state(&self) -> CollectiveState { self.state.get() }
+    pub fn get_key(&self) -> usize {
+        self.key
+    }
     #[inline]
-    pub fn set_state(&self, new: CollectiveState) { self.state.set(new); }
+    pub fn get_state(&self) -> CollectiveState {
+        self.state.get()
+    }
     #[inline]
-    pub fn clone_state(&self) -> MachineState { self.state.clone() }
+    pub fn set_state(&self, new: CollectiveState) {
+        self.state.set(new);
+    }
+    #[inline]
+    pub fn clone_state(&self) -> MachineState {
+        self.state.clone()
+    }
     // the remainder are implemented via a trait object
     #[inline]
     pub fn sel_recv<'a>(&'a self, sel: &mut crossbeam::Select<'a>) -> usize {
@@ -54,7 +71,8 @@ impl MachineAdapter {
     }
     #[inline]
     pub fn receive_cmd(&self, time_slice: Duration, stats: &mut ExecutorStats) {
-        self.normalized_adapter.receive_cmd(&self.state, time_slice, stats)
+        self.normalized_adapter
+            .receive_cmd(&self.state, self.get_and_clear_once(), time_slice, stats)
     }
     #[inline]
     pub fn try_recv_task(&self, machine: &ShareableMachine) -> Option<Task> {
@@ -65,7 +83,6 @@ impl MachineAdapter {
 // collective. It is cloned as a task, and moved into tls as a clone.
 // The idea being that its faster to clone an Arc<> than it is to copy it.
 pub type ShareableMachine = Arc<MachineAdapter>;
-
 
 ///
 /// The state of the machine.
@@ -93,11 +110,11 @@ pub type MachineState = SharedProtectedObject<CollectiveState>;
 /// instruction set being used, otherwise a <T> would need to be exposed.
 /// Exposing a <T> has ramification in schedulting and execution which
 /// don't arise due to the encapsulation.
-pub trait MachineDependentAdapter : Send + Sync + fmt::Debug {
+pub trait MachineDependentAdapter: Send + Sync + fmt::Debug {
     /// Prepare a select.recv()
     fn sel_recv<'a>(&'a self, sel: &mut crossbeam::Select<'a>) -> usize;
     /// Complete the select.recv() with a try_recv
     fn try_recv_task(&self, machine: &ShareableMachine) -> Option<Task>;
     /// Deliver the instruction into the machine.
-    fn receive_cmd(&self, state: &MachineState, time_slice: Duration, stats: &mut ExecutorStats);
+    fn receive_cmd(&self, state: &MachineState, once: bool, time_slice: Duration, stats: &mut ExecutorStats);
 }

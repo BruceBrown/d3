@@ -37,7 +37,6 @@ pub trait MonitorControl: Send + Sync {
 }
 pub type MonitorControlObj = Arc<dyn MonitorControl>;
 
-
 /// The factory for the executor
 pub trait ExecutorFactory {
     /// set the number of executor threads
@@ -63,7 +62,6 @@ pub trait ExecutorControl: Send + Sync {
 }
 pub type ExecutorControlObj = Arc<dyn ExecutorControl>;
 
-
 /// The schdeuler and executor commands
 #[allow(dead_code)]
 pub enum SchedCmd {
@@ -84,7 +82,11 @@ pub type SchedReceiver = crossbeam::Receiver<SchedCmd>;
 pub trait SchedulerFactory {
     fn get_sender(&self) -> SchedSender;
     // start has to return a sized object trait, I prefer Arc over Box
-    fn start(&self, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Arc<dyn Scheduler>;
+    fn start(
+        &self,
+        monitor: MonitorSender,
+        queues: (TaskInjector, SchedTaskInjector),
+    ) -> Arc<dyn Scheduler>;
 }
 /// The scheduler trait
 pub trait Scheduler: Send + Sync {
@@ -93,4 +95,3 @@ pub trait Scheduler: Send + Sync {
     /// stop the scheduler
     fn stop(&self);
 }
-
