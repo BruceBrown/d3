@@ -11,7 +11,10 @@ pub struct Task {
 }
 impl Task {
     pub fn new(machine: &ShareableMachine) -> Self {
-        Self { start: std::time::Instant::now(), machine: Arc::clone(machine) }
+        Self {
+            start: std::time::Instant::now(),
+            machine: Arc::clone(machine),
+        }
     }
 }
 
@@ -75,17 +78,11 @@ pub struct SharedCollectiveSenderAdapter {
 }
 impl SharedCollectiveSenderAdapter {
     /// Get the id of the sending machine
-    pub const fn get_id(&self) -> Uuid {
-        self.id
-    }
+    pub const fn get_id(&self) -> Uuid { self.id }
     /// Get the key of the sending machine
-    pub fn get_key(&self) -> usize {
-        self.key
-    }
+    pub fn get_key(&self) -> usize { self.key }
     /// Try to send the message
-    pub fn try_send(&mut self) -> Result<(), TrySendError> {
-        self.normalized_adapter.try_send()
-    }
+    pub fn try_send(&mut self) -> Result<(), TrySendError> { self.normalized_adapter.try_send() }
 }
 
 pub trait CollectiveSenderAdapter {
@@ -110,20 +107,14 @@ impl SharedExecutorInfo {
         self.start_idle = Instant::now();
         self.start_idle
     }
-    pub fn set_state(&mut self, new: ExecutorState) {
-        self.state = new
-    }
-    pub fn get_state(&self) -> ExecutorState {
-        self.state
-    }
+    pub fn set_state(&mut self, new: ExecutorState) { self.state = new }
+    pub fn get_state(&self) -> ExecutorState { self.state }
     pub fn compare_set_state(&mut self, old: ExecutorState, new: ExecutorState) {
         if self.state == old {
             self.state = new
         }
     }
-    pub fn get_state_and_elapsed(&self) -> (ExecutorState, Duration) {
-        (self.state, self.start_idle.elapsed())
-    }
+    pub fn get_state_and_elapsed(&self) -> (ExecutorState, Duration) { (self.state, self.start_idle.elapsed()) }
 }
 impl Default for SharedExecutorInfo {
     fn default() -> Self {
@@ -193,7 +184,9 @@ impl ExecutorData {
                 "Executor {} detected recursive send block, this should not happen",
                 self.id
             );
-            unreachable!("block_or_continue() should be called to prevent entering sender_blocked with a blocked machine")
+            unreachable!(
+                "block_or_continue() should be called to prevent entering sender_blocked with a blocked machine"
+            )
         } else {
             // otherwise we can stack the incomplete send. Depth is a concern.
             // the sends could be offloaded, however it has the potential to
@@ -212,8 +205,7 @@ impl ExecutorData {
         };
         while !self.blocked_senders.is_empty() {
             self.shared_info.lock().as_mut().unwrap().set_idle();
-            let mut still_blocked: Vec<SharedCollectiveSenderAdapter> =
-                Vec::with_capacity(self.blocked_senders.len());
+            let mut still_blocked: Vec<SharedCollectiveSenderAdapter> = Vec::with_capacity(self.blocked_senders.len());
             let mut handled_recursive_sender = false;
             for mut sender in self.blocked_senders.drain(..) {
                 match sender.try_send() {
@@ -222,12 +214,12 @@ impl ExecutorData {
                         backoff.reset();
                         machine_state.set(CollectiveState::Running);
                         handled_recursive_sender = true;
-                    }
+                    },
                     Err(TrySendError::Disconnected) if sender.key == machine_key => {
                         backoff.reset();
                         machine_state.set(CollectiveState::Running);
                         handled_recursive_sender = true;
-                    }
+                    },
                     // handle all others
                     Ok(()) => {
                         backoff.reset();
@@ -236,7 +228,7 @@ impl ExecutorData {
                             ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.key),
                             _ => log::error!("can't notify scheduler!!!"),
                         };
-                    }
+                    },
                     Err(TrySendError::Disconnected) => {
                         backoff.reset();
                         // let the scheduler know that this machine can now be scheduled
@@ -244,10 +236,10 @@ impl ExecutorData {
                             ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.key),
                             _ => log::error!("can't notify scheduler!!!"),
                         };
-                    }
+                    },
                     Err(TrySendError::Full) => {
                         still_blocked.push(sender);
-                    }
+                    },
                 }
             }
             self.blocked_senders = still_blocked;
@@ -257,9 +249,7 @@ impl ExecutorData {
             // if we haven't worked out way free, then we need to notify that we're kinda stuck
             // even though we've done that, we may yet come free. As long as we're not told to
             // terminate, we'll keep running.
-            if backoff.is_completed()
-                && self.shared_info.lock().unwrap().get_state() != ExecutorState::Parked
-            {
+            if backoff.is_completed() && self.shared_info.lock().unwrap().get_state() != ExecutorState::Parked {
                 // we need to notify the monitor that we're essentially dead.
                 self.shared_info
                     .lock()
@@ -302,6 +292,5 @@ thread_local! {
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
-    use super::*;
+    #[allow(unused_imports)] use super::*;
 }

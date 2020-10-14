@@ -1,5 +1,4 @@
-#[allow(unused_imports)]
-use super::*;
+#[allow(unused_imports)] use super::*;
 
 /// The MachineBuilder lives in d3-collective. This is due to a
 /// dependency upon ShareableMachine and Sender.
@@ -23,10 +22,7 @@ pub trait MachineBuilder {
     type InstructionSet: MachineImpl;
 
     /// build with a fixed size queue capacity
-    fn build_raw<T>(
-        raw: T,
-        channel_capacity: usize,
-    ) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
+    fn build_raw<T>(raw: T, channel_capacity: usize) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
     where
         T: 'static + Machine<Self::InstructionSet>,
         <Self as MachineBuilder>::InstructionSet: Send;
@@ -46,9 +42,7 @@ pub trait MachineBuilder {
         <Self as MachineBuilder>::InstructionSet: Send;
 
     /// add an instruction set
-    fn build_addition_unbounded<T>(
-        machine: &Arc<Mutex<T>>,
-    ) -> (Sender<Self::InstructionSet>, MachineAdapter)
+    fn build_addition_unbounded<T>(machine: &Arc<Mutex<T>>) -> (Sender<Self::InstructionSet>, MachineAdapter)
     where
         T: 'static + Machine<Self::InstructionSet>,
         <Self as MachineBuilder>::InstructionSet: Send;

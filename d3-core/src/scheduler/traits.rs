@@ -1,5 +1,8 @@
+use self::sched::SchedStats;
 use super::*;
+use crate::machine_impl::*;
 use crossbeam::deque;
+use d3_derive::*;
 
 ///
 /// These are traits that are used for major components
@@ -8,18 +11,33 @@ use crossbeam::deque;
 ///
 /// Messages which can be sent to the system monitor
 #[allow(dead_code)]
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum MonitorMessage {
     // Terminate the monitor
     Terminate,
+    // Add Sender
+    AddSender(CoreStatsSender),
+    // Remove Sender
+    RemoveSender(CoreStatsSender),
     // Sent by an executor when it parks
     Parked(usize),
     // Sent by a executor as it completes, signalling that its joinable
     Terminated(usize),
-    // Send by an executor, providing periodic stats
+    // Sent by an executor, providing periodic stats
     ExecutorStats(ExecutorStats),
+    // Sent by the scheduler, providing periodic stats
+    SchedStats(SchedStats),
 }
 pub type MonitorSender = crossbeam::Sender<MonitorMessage>;
+
+#[derive(Debug, Copy, Clone, MachineImpl)]
+pub enum CoreStatsMessage {
+    // Sent by an executor, providing periodic stats
+    ExecutorStats(ExecutorStats),
+    // Sent by the scheduler, providing periodic stats
+    SchedStats(SchedStats),
+}
+pub type CoreStatsSender = Sender<CoreStatsMessage>;
 
 // The factory for the system monitor
 pub trait MonitorFactory {
@@ -34,6 +52,10 @@ pub type MonitorFactoryObj = Arc<dyn MonitorFactory>;
 pub trait MonitorControl: Send + Sync {
     /// stop the system monitor
     fn stop(&self);
+    /// add a stats sender to the system monitor
+    fn add_sender(&self, sender: CoreStatsSender);
+    /// remove a stats sender to the system monitor
+    fn remove_sender(&self, sender: CoreStatsSender);
 }
 pub type MonitorControlObj = Arc<dyn MonitorControl>;
 
@@ -55,6 +77,8 @@ pub type SchedTaskInjector = Arc<deque::Injector<SchedTask>>;
 pub trait ExecutorControl: Send + Sync {
     /// notifies the executor that an executor is parked
     fn parked_executor(&self, id: usize);
+    /// Wake parked threads
+    fn wake_parked_threads(&self);
     /// notifies the executor that an executor completed and can be joined
     fn joinable_executor(&self, id: usize);
     /// stop the executor
@@ -82,11 +106,7 @@ pub type SchedReceiver = crossbeam::Receiver<SchedCmd>;
 pub trait SchedulerFactory {
     fn get_sender(&self) -> SchedSender;
     // start has to return a sized object trait, I prefer Arc over Box
-    fn start(
-        &self,
-        monitor: MonitorSender,
-        queues: (TaskInjector, SchedTaskInjector),
-    ) -> Arc<dyn Scheduler>;
+    fn start(&self, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Arc<dyn Scheduler>;
 }
 /// The scheduler trait
 pub trait Scheduler: Send + Sync {

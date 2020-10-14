@@ -17,23 +17,15 @@ pub fn configure(settings: &settings::Settings) -> Result<Vec<ComponentInfo>, Co
             let config = SimpleConfig::from(v);
             if config.enabled {
                 let result = match k {
-                    settings::Component::EchoConsumer => {
-                        component::echo_consumer::configure(config, &settings)
-                    }
-                    settings::Component::EchoProducer => {
-                        component::echo_producer::configure(config, &settings)
-                    }
-                    settings::Component::ChatConsumer => {
-                        chat_service::chat_consumer::configure(config, &settings)
-                    }
-                    settings::Component::ChatProducer => {
-                        chat_service::chat_producer::configure(config, &settings)
-                    }
+                    settings::Component::EchoConsumer => component::echo_consumer::configure(config, &settings),
+                    settings::Component::EchoProducer => component::echo_producer::configure(config, &settings),
+                    settings::Component::ChatConsumer => chat_service::chat_consumer::configure(config, &settings),
+                    settings::Component::ChatProducer => chat_service::chat_producer::configure(config, &settings),
                     #[allow(unreachable_patterns)]
                     _ => {
                         log::warn!("unhandled {:#?} component configuration", k);
                         Ok(None)
-                    }
+                    },
                 };
                 if let Err(e) = result {
                     return Err(e);

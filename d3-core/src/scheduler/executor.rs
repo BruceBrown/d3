@@ -4,16 +4,14 @@ use crossbeam::deque;
 
 const WORKER_MESSAGE_QUEUE_COUNT: usize = 10;
 
-
 /// The timeslice given to receive_cmd, allowing it to recv multiple commands
 static TIMESLICE_IN_MILLIS: AtomicCell<usize> = AtomicCell::new(20);
 
-pub fn get_time_slice() -> std::time::Duration {
-    std::time::Duration::from_millis(TIMESLICE_IN_MILLIS.load() as u64)
-}
-pub fn set_time_slice(new: std::time::Duration) {
-    TIMESLICE_IN_MILLIS.store(new.as_millis() as usize)
-}
+pub fn get_time_slice() -> std::time::Duration { std::time::Duration::from_millis(TIMESLICE_IN_MILLIS.load() as u64) }
+pub fn set_time_slice(new: std::time::Duration) { TIMESLICE_IN_MILLIS.store(new.as_millis() as usize) }
+
+pub static RUN_QUEUE_LEN: AtomicUsize = AtomicUsize::new(0);
+pub static EXECUTORS_SNOOZING: AtomicUsize = AtomicUsize::new(0);
 
 ///
 /// Unlike most of the system, which uses u128 ids, the executor uses usize. If atomic u128 were
@@ -41,9 +39,7 @@ impl SystemExecutorFactory {
 /// impl the factory
 impl ExecutorFactory for SystemExecutorFactory {
     // change the number of executors
-    fn with_workers(&self, workers: usize) {
-        self.workers.replace(workers);
-    }
+    fn with_workers(&self, workers: usize) { self.workers.replace(workers); }
     // get thread run_queue, wait_queue
     fn get_queues(&self) -> (TaskInjector, SchedTaskInjector) {
         (Arc::clone(&self.run_queue), Arc::clone(&self.wait_queue))
@@ -87,15 +83,9 @@ struct Notifier {
 }
 impl ExecutorNotifier for Notifier {
     fn notify_parked(&self, executor_id: usize) {
-        if self
-            .monitor
-            .send(MonitorMessage::Parked(executor_id))
-            .is_err()
-        {};
+        if self.monitor.send(MonitorMessage::Parked(executor_id)).is_err() {};
     }
-    fn notify_can_schedule(&self, machine_key: usize) {
-        self.wait_queue.push(SchedTask::new(machine_key));
-    }
+    fn notify_can_schedule(&self, machine_key: usize) { self.wait_queue.push(SchedTask::new(machine_key)); }
 }
 
 ///
@@ -144,24 +134,20 @@ impl ThreadData {
             self.setup();
             let mut stats = ExecutorStats::default();
             stats.id = self.id;
-            let mut last_stats_time = std::time::Instant::now();
+            let mut stats_event = SimpleEventTimer::default();
             let time_slice = get_time_slice();
+            let backoff = crossbeam::utils::Backoff::new();
             loop {
                 // report to the system monitor, maybe look at fixing drift
-                if last_stats_time.elapsed().as_millis() > 1000 * 60 * 5 {
-                    if self.monitor
-                        .send(MonitorMessage::ExecutorStats(stats))
-                        .is_err(){}
-                    last_stats_time = std::time::Instant::now();
-                }
+                if stats_event.check() && self.monitor.send(MonitorMessage::ExecutorStats(stats)).is_err() {}
                 // processs any received commands, break out of loop if told to terminate
                 if self.try_recv() {
                     break;
                 }
                 // move blocked senders along...
-                self.try_completing_send(&mut stats);
+                let blocked_sender_count = self.try_completing_send(&mut stats);
                 // try to run a task
-                self.run_task(time_slice, &mut stats);
+                let ran_task = self.run_task(time_slice, &mut stats);
                 // if no longer running and we don't have any blocked senders, we can leave
                 if self.get_state() == ExecutorState::Parked {
                     let is_empty = tls_executor_data.with(|t| {
@@ -171,6 +157,20 @@ impl ThreadData {
                     if is_empty {
                         break;
                     }
+                }
+                // and after all that, we've got nothing left to do. Let's catch some zzzz's
+                if blocked_sender_count == 0 && !ran_task {
+                    if backoff.is_completed() {
+                        //log::debug!("executor {} is sleeping", self.id);
+                        EXECUTORS_SNOOZING.fetch_add(1, Ordering::SeqCst);
+                        thread::park_timeout(Duration::from_secs(300));
+                        EXECUTORS_SNOOZING.fetch_sub(1, Ordering::SeqCst);
+                    //log::debug!("executor {} is awake", self.id);
+                    } else {
+                        backoff.snooze();
+                    }
+                } else {
+                    backoff.reset();
                 }
             }
             log::debug!("executor {} is done", self.id);
@@ -186,15 +186,8 @@ impl ThreadData {
                 }
             });
             // as a last and final, tell the monitor that we're dead...
-            if self
-                .monitor
-                .send(MonitorMessage::Terminated(self.id))
-                .is_err()
-            {
-                log::warn!(
-                    "executor {} exiting without informing system monitor",
-                    self.id
-                );
+            if self.monitor.send(MonitorMessage::Terminated(self.id)).is_err() {
+                log::warn!("executor {} exiting without informing system monitor", self.id);
             }
         });
         Some(thread)
@@ -202,9 +195,7 @@ impl ThreadData {
 
     #[inline]
     // get the executor state
-    fn get_state(&self) -> ExecutorState {
-        self.shared_info.lock().unwrap().get_state()
-    }
+    fn get_state(&self) -> ExecutorState { self.shared_info.lock().unwrap().get_state() }
 
     // one time setup
     fn setup(&mut self) {
@@ -222,11 +213,7 @@ impl ThreadData {
         });
         // pull out some commonly used stuff
         self.stealers = self.build_stealers();
-        log::debug!(
-            "executor {} running with {} stealers",
-            self.id,
-            self.stealers.len()
-        );
+        log::debug!("executor {} running with {} stealers", self.id, self.stealers.len());
         self.shared_info
             .lock()
             .as_mut()
@@ -247,7 +234,7 @@ impl ThreadData {
                     self.id,
                     self.stealers.len()
                 );
-            }
+            },
             // ignore rebuilds when not running
             Ok(SchedCmd::RebuildStealers) => (),
             Ok(_) => log::warn!("executor received unexpected message"),
@@ -257,10 +244,10 @@ impl ThreadData {
         should_terminate
     }
 
-    fn try_completing_send(&mut self, stats: &mut ExecutorStats) {
+    fn try_completing_send(&mut self, stats: &mut ExecutorStats) -> usize {
         tls_executor_data.with(|t| {
             let mut tls = t.borrow_mut();
-            if !tls.blocked_senders.is_empty() {
+            let blocked_sender_count = if !tls.blocked_senders.is_empty() {
                 let len = tls.blocked_senders.len();
                 if len > stats.max_blocked_senders {
                     stats.max_blocked_senders = len;
@@ -272,27 +259,34 @@ impl ThreadData {
                     match sender.try_send() {
                         Ok(()) => {
                             self.wait_queue.push(SchedTask::new(sender.get_key()));
-                        }
-                        Err(TrySendError::Disconnected) => {}
+                        },
+                        Err(TrySendError::Disconnected) => {},
                         Err(TrySendError::Full) => {
                             still_blocked.push(sender);
-                        }
+                        },
                     };
                 }
                 tls.blocked_senders = still_blocked;
                 tls.last_blocked_send_len = tls.blocked_senders.len();
-            }
-        });
+                tls.last_blocked_send_len
+            } else {
+                0
+            };
+            blocked_sender_count
+        })
     }
 
     // if we're still running, run get a task and run it. If no tasks, yeild
-    fn run_task(&mut self, time_slice: Duration, stats: &mut ExecutorStats) {
+    fn run_task(&mut self, time_slice: Duration, stats: &mut ExecutorStats) -> bool {
         if self.get_state() == ExecutorState::Running {
+            let mut drop_count = 0;
             loop {
                 if let Some(task) = find_task(&self.work, &self.run_queue, &self.stealers) {
+                    RUN_QUEUE_LEN.fetch_sub(1, Ordering::SeqCst);
                     if task.machine.get_state() == CollectiveState::Dead {
                         // if its a dead task, we need to just drop it and get something else to work on
                         drop(task);
+                        drop_count += 1;
                         sched::live_machine_count.fetch_sub(1, Ordering::SeqCst);
                     } else {
                         stats.time_on_queue += task.start.elapsed();
@@ -315,14 +309,15 @@ impl ThreadData {
                             log::debug!("parked executor {} completed", self.id);
                         }
                         // since we did a bunch of work we can leave
-                        break;
+                        return true;
                     }
                 } else {
-                    std::thread::yield_now();
-                    break;
+                    // if we did any drops, we did some work...take credit for it
+                    return drop_count != 0;
                 }
             }
         }
+        false
     }
 
     #[inline]
@@ -331,7 +326,7 @@ impl ThreadData {
             CollectiveState::Running => {
                 self.wait_queue.push(SchedTask::new(machine.key));
                 return;
-            }
+            },
             CollectiveState::Dead => SchedCmd::Remove(machine.key),
             _ => return,
         };
@@ -353,6 +348,14 @@ struct Worker {
 impl Worker {
     fn get_state_and_elapsed(&self) -> (ExecutorState, Duration) {
         self.shared_info.lock().unwrap().get_state_and_elapsed()
+    }
+    fn wake_executor(&self) { self.thread.as_ref().unwrap().thread().unpark(); }
+    fn wakeup_and_die(&self) {
+        if self.sender.send(SchedCmd::Terminate(false)).is_err() {
+            log::trace!("Failed to send terminate to executor {}", self.id);
+        }
+        // in case its asleep, wake it up to handle the terminate message
+        self.thread.as_ref().unwrap().thread().unpark();
     }
 }
 type Id = usize;
@@ -437,10 +440,9 @@ impl Executor {
     }
     // stop the executor
     fn stop(&self) {
+        // tell all the workers to stop their executors
         for w in self.workers.read().unwrap().iter() {
-            if w.1.sender.send(SchedCmd::Terminate(false)).is_err() {
-                log::trace!("Failed to send terminate to executor {}", *w.0);
-            }
+            w.1.wakeup_and_die();
         }
     }
     // notification that an executor is parked
@@ -463,7 +465,7 @@ impl Executor {
                     deque::Steal::Success(task) => {
                         count += 1;
                         self.run_queue.push(task)
-                    }
+                    },
                 }
             }
             log::debug!(
@@ -482,7 +484,15 @@ impl Executor {
         }
         self.add_executor();
     }
-
+    // wake parked threads
+    fn wake_parked_threads(&self) {
+        // protect ourself from re-entry
+        let _guard = self.barrier.lock().unwrap();
+        // tell the workers to wake their executor
+        self.workers.read().unwrap().iter().for_each(|(_, v)| {
+            v.wake_executor();
+        });
+    }
     // notification that an executor completed and can be joined
     fn joinable_executor(&self, id: usize) {
         if let Some(_worker) = self.parked_workers.write().unwrap().remove(&id) {
@@ -545,7 +555,7 @@ impl Executor {
     // lauch the workers and get the executors running
     fn launch(&self) {
         let mut threads = Vec::<ThreadData>::new();
-        for _ in 0..self.worker_count {
+        for _ in 0 .. self.worker_count {
             let (worker, thread_data) = self.new_worker();
             self.workers.write().unwrap().insert(worker.id, worker);
             threads.push(thread_data);
@@ -560,26 +570,20 @@ impl Executor {
 /// impl the trait object for controlling the executor
 impl ExecutorControl for Executor {
     /// Notification that an executor has been parked
-    fn parked_executor(&self, id: usize) {
-        self.parked_executor(id);
-    }
+    fn parked_executor(&self, id: usize) { self.parked_executor(id); }
 
     /// notifies the executor that an executor completed and can be joined
-    fn joinable_executor(&self, id: usize) {
-        self.joinable_executor(id);
-    }
+    fn joinable_executor(&self, id: usize) { self.joinable_executor(id); }
 
     /// stop the executor
-    fn stop(&self) {
-        self.stop();
-    }
+    fn stop(&self) { self.stop(); }
+    /// Wake parked threads
+    fn wake_parked_threads(&self) { self.wake_parked_threads(); }
 }
 
 impl Drop for Executor {
     fn drop(&mut self) {
         log::info!("sending terminate to all workers");
-        //@todo: Need to unpark any parked threads
-
         for w in self.workers.write().unwrap().iter() {
             if w.1.sender.send(SchedCmd::Terminate(false)).is_err() {
                 log::trace!("Failed to send terminate to worker");
@@ -610,11 +614,9 @@ mod tests {
         let executor_factory = SystemExecutorFactory::new();
         let scheduler_factory = create_sched_factory();
         executor_factory.with_workers(16);
-        let executor =
-            executor_factory.start(monitor_factory.get_sender(), scheduler_factory.get_sender());
+        let executor = executor_factory.start(monitor_factory.get_sender(), scheduler_factory.get_sender());
         thread::sleep(Duration::from_millis(100));
         executor.stop();
         thread::sleep(Duration::from_millis(100));
     }
-
 }

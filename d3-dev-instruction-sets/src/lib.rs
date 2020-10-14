@@ -3,13 +3,11 @@
 extern crate smart_default;
 
 // this should become a prelude
-#[allow(unused_imports)]
-use std::sync::{Arc, Mutex};
+#[allow(unused_imports)] use std::sync::{Arc, Mutex};
 
 use d3_core::machine_impl::*;
 
-#[allow(unused_imports)]
-use d3_derive::*;
+#[allow(unused_imports)] use d3_derive::*;
 
 // The instruction sets don't need to live here. However,
 // its good to have 1 for testing and a 2nd to ensure that

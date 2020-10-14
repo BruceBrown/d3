@@ -33,10 +33,7 @@ where
     wrap(s, r)
 }
 
-fn wrap<T>(
-    sender: crossbeam::Sender<T>,
-    receiver: crossbeam::Receiver<T>,
-) -> (Sender<T>, Receiver<T>)
+fn wrap<T>(sender: crossbeam::Sender<T>, receiver: crossbeam::Receiver<T>) -> (Sender<T>, Receiver<T>)
 where
     T: MachineImpl,
 {

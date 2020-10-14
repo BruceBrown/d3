@@ -1,4 +1,13 @@
-# d3 -- Revision History
+# d3 -- Revision ChangeLog
+**There hasn't been a release, stay tuned.**
+
+## Finally, executor threads can now idle
+Previously, the executor threads would yield when a cycle performed no work. Now, it will use a backoff to yeild and when the backoff has determined that its completed, the thread will park. This requires that the scheduler wake it when it schedules work. The downside of this is that the schdeuler needs to know if there are executors sleeping, which becomes an atomic shared between executors and the scheduler.
+
+### Added a trivial Monitor Service
+The service will periodically display statistics from the executor and scheduler. You'll find it in the new examples folder. Connect with nc, telnet, or your favorite tcp tool.
+### Added a trivial alice-service
+The service is an http/html service that can be driven by a browser. Its a form where you can initialize, start, stop, and wave good-bye to Alice. Connect with your favorite browser for seconds of fun.
 
 ## More Cleanup and Reorg
 Added integration tests and benches. Move Forwarder, DaisyChain, FaninFanout and ChaosMonkey into their own area; d3-test-driver. Where they can be referenced by benches and tests. Move the test server from /src to d3-test-server, which seems like a more fitting place.

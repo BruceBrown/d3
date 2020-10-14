@@ -78,4 +78,6 @@ members = [
  "echo-service",
  "d3-test-server",
  "d3-test-drivers",
+ "examples/monitor-service",
+ "examples/alice-service",
 ]

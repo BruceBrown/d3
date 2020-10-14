@@ -104,9 +104,9 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                     }
                 }
             }
-            fn receive_cmd(&self, state: &MachineState, once: bool, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
+            fn receive_cmd(&self, state: &MachineState, once: bool, uuid: uuid::Uuid, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
                 if once {
-                    self.machine.connected();
+                    self.machine.connected(uuid);
                 }
                 if state.get() == CollectiveState::Disconnected {
                     state.set(CollectiveState::Running);

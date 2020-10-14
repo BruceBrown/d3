@@ -1,0 +1,9 @@
+edition = "2018"
+max_width = 120
+fn_single_line = true
+inline_attribute_width = 100
+match_block_trailing_comma = true
+spaces_around_ranges = true
+fn_args_layout = "Tall"
+report_todo = "Always"
+report_fixme = "Always"

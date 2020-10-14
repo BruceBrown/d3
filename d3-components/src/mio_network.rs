@@ -1,5 +1,5 @@
-#[allow(unused_imports)]
-use super::*;
+
+#[allow(unused_imports)] use super::*;
 
 use std::boxed::Box;
 use std::io::{self, Read};
@@ -13,30 +13,6 @@ use crossbeam::TryRecvError;
 use ringbuf::RingBuffer;
 use slab::Slab;
 
-// This is where d3 meets Tcp (Udp to follow). At first, it may seem counter intuitive that d3
-// doesn't have the network at its core. However, there are many cases where the network is
-// unnecessary. Additionally, we may want to swap in and out implementations. Anyway, its here.
-// Take a look at the instruction set and you'll see that the interface is pretty brain-dead
-// simple.
-//
-
-/*
-websequence diagram:
-title NetSeq
-Alice->Net: BindListner(addr, Alice:sender)
-note right of Alice: Alice waits for a connection
-Net->Alice: NewConn(conn_id, local_addr, remote_addr, write_buf_size)
-note right of Alice: Alice is told of the connection and has Bob handle it
-Alice->Net: BindConn(conn_id, Bob:sender)
-note left of Bob: Bob gets some bytes
-Net->Bob: RecvBytes(conn_id, bytes)
-note left of Bob: Bob sends some bytes
-Bob->Net: SendBytes(conn_id, bytes)
-note left of Bob: Bob may be told how much more he can send
-Net->Bob: SendReady(write_buf_size)
-note left of Bob: Bob Closes the connection
-Bob->Net: Close(conn_id)
-*/
 
 //
 // Here's how this all works... There's a single thread responsible the network. Essentially,
@@ -86,9 +62,7 @@ struct SystemNetworkFactory {
 /// The implementation of the trait object for the factory
 impl NetworkFactory for SystemNetworkFactory {
     /// get a clone of the sender for the schdeduler
-    fn get_sender(&self) -> NetSender {
-        self.sender.clone()
-    }
+    fn get_sender(&self) -> NetSender { self.sender.clone() }
     /// start the network
     fn start(&self) -> NetworkControlObj {
         log::info!("creating network");
@@ -117,9 +91,7 @@ impl Mio {
 /// This is the trait object for Mio
 impl NetworkControl for Mio {
     /// stop the scheduler
-    fn stop(&self) {
-        self.stop();
-    }
+    fn stop(&self) { self.stop(); }
 }
 
 /// If we haven't done so already, attempt to stop the schduler thread
@@ -194,11 +166,11 @@ impl Connection {
                 Ok(n) => {
                     self.send_count += n;
                     break Ok(());
-                }
+                },
                 Err(ref err) if would_block(err) => {
                     self.is_ready = false;
                     break Ok(());
-                }
+                },
                 Err(ref err) if interrupted(err) => (),
                 Err(err) => break Err(Box::new(err)),
             }
@@ -206,10 +178,7 @@ impl Connection {
         // if we've sent 1/2 our capacity without a report, send a report
         if self.send_count > MAX_BYTES / 2 {
             self.send_count = 0;
-            send_cmd(
-                &self.sender,
-                NetCmd::SendReady(token.0, self.producer.remaining()),
-            );
+            send_cmd(&self.sender, NetCmd::SendReady(token.0, self.producer.remaining()));
         }
         result
     }
@@ -237,7 +206,7 @@ impl NetworkWaker {
                     if self.check_yourself_before_you_wreck_yourself() {
                         break;
                     }
-                }
+                },
                 1 => loop {
                     // poke until done, cuz we might have hit an edge
                     if self.mio_receiver.receiver.is_empty() {
@@ -332,15 +301,15 @@ impl NetworkThread {
                                 Ok((connection, address)) => (connection, address),
                                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
                                     break;
-                                }
+                                },
                                 Err(_e) => {
                                     server.is_dead = true;
                                     break;
-                                }
+                                },
                             };
                             self.store_connection(&token, connection, address)?;
                         }
-                    }
+                    },
                     token => {
                         match self.handle_connection_event(&token, event) {
                             Ok(true) => match self.remove_connection(&token, true) {
@@ -350,7 +319,7 @@ impl NetworkThread {
                             Err(_e) => (), // might want to log here
                             _ => (),
                         };
-                    }
+                    },
                 }
             }
             // we've processed all of the events, now for the channel
@@ -361,7 +330,7 @@ impl NetworkThread {
                     Ok(NetCmd::Stop) => {
                         self.is_running = false;
                         break Ok(());
-                    }
+                    },
                     Ok(NetCmd::BindListener(addr, sender)) => self.bind_listener(addr, sender),
                     Ok(NetCmd::BindConn(conn_id, sender)) => self.bind_connection(conn_id, sender),
                     Ok(NetCmd::CloseConn(conn_id)) => self.close_connection(conn_id),
@@ -370,11 +339,11 @@ impl NetworkThread {
                     Ok(_) => {
                         log::warn!("unhandled NetCmd");
                         Ok(())
-                    }
+                    },
                     Err(TryRecvError::Disconnected) => {
                         self.is_running = false;
                         break Ok(());
-                    }
+                    },
                     Err(TryRecvError::Empty) => break Ok(()),
                 };
                 if result.is_err() {
@@ -407,8 +376,8 @@ impl NetworkThread {
                             // connection or is done writing, then so are we.
                             connection_closed = true;
                             break;
-                        }
-                        Ok(n) => received_data.extend_from_slice(&buf[..n]),
+                        },
+                        Ok(n) => received_data.extend_from_slice(&buf[.. n]),
                         // Would block "errors" are the OS's way of saying that the
                         // connection is not actually ready to perform this I/O operation.
                         Err(ref err) if would_block(err) => break,
@@ -418,10 +387,7 @@ impl NetworkThread {
                     }
                 }
                 if !received_data.is_empty() {
-                    send_cmd(
-                        &conn.sender,
-                        NetCmd::RecvBytes(token.0, received_data),
-                    );
+                    send_cmd(&conn.sender, NetCmd::RecvBytes(token.0, received_data));
                 }
                 if connection_closed {
                     return Ok(true);
@@ -466,11 +432,9 @@ impl NetworkThread {
         let key: usize = token.0 - 1024;
         if let Some(conn) = self.connections.get_mut(key) {
             conn.sender = sender;
-            self.poll.registry().register(
-                &mut conn.stream,
-                token,
-                Interest::READABLE.add(Interest::WRITABLE),
-            )?;
+            self.poll
+                .registry()
+                .register(&mut conn.stream, token, Interest::READABLE.add(Interest::WRITABLE))?;
         }
         Ok(())
     }
@@ -509,27 +473,16 @@ impl NetworkThread {
             entry.insert(conn);
             send_cmd(
                 &server.sender,
-                NetCmd::NewConn(
-                    token.0,
-                    server.bind_addr.to_string(),
-                    address.to_string(),
-                    MAX_BYTES,
-                ),
+                NetCmd::NewConn(token.0, server.bind_addr.to_string(), address.to_string(), MAX_BYTES),
             );
         }
         Ok(())
     }
 }
 
-fn would_block(err: &io::Error) -> bool {
-    err.kind() == io::ErrorKind::WouldBlock
-}
+fn would_block(err: &io::Error) -> bool { err.kind() == io::ErrorKind::WouldBlock }
 
-fn interrupted(err: &io::Error) -> bool {
-    err.kind() == io::ErrorKind::Interrupted
-}
+fn interrupted(err: &io::Error) -> bool { err.kind() == io::ErrorKind::Interrupted }
 
 #[cfg(test)]
-mod tests {
-
-}
+mod tests {}

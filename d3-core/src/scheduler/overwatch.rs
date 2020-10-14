@@ -17,9 +17,7 @@ impl SystemMonitorFactory {
 }
 
 impl MonitorFactory for SystemMonitorFactory {
-    fn get_sender(&self) -> MonitorSender {
-        self.sender.clone()
-    }
+    fn get_sender(&self) -> MonitorSender { self.sender.clone() }
     fn start(&self, executor: ExecutorControlObj) -> MonitorControlObj {
         SystemMonitor::start(self.sender.clone(), self.receiver.clone(), executor)
     }
@@ -36,11 +34,7 @@ pub struct SystemMonitor {
 
 impl SystemMonitor {
     /// Start the system monitor. The sooner, the better.
-    fn start(
-        sender: MonitorSender,
-        receiver: MonitorReceiver,
-        executor: ExecutorControlObj,
-    ) -> MonitorControlObj {
+    fn start(sender: MonitorSender, receiver: MonitorReceiver, executor: ExecutorControlObj) -> MonitorControlObj {
         let monitor = Self {
             sender,
             thread: ThreadData::spawn(receiver, executor),
@@ -49,15 +43,17 @@ impl SystemMonitor {
     }
 
     /// Stop the system monitor. Late stopping is recommended.
-    fn stop(&self) {
-        if self.sender.send(MonitorMessage::Terminate).is_err() {}
-    }
+    fn stop(&self) { if self.sender.send(MonitorMessage::Terminate).is_err() {} }
 }
 
 impl MonitorControl for SystemMonitor {
     /// stop the system monitor
-    fn stop(&self) {
-        self.stop();
+    fn stop(&self) { self.stop(); }
+    /// add a stats sender to the system monitor
+    fn add_sender(&self, sender: CoreStatsSender) { if self.sender.send(MonitorMessage::AddSender(sender)).is_err() {} }
+    /// remove a stats sender to the system monitor
+    fn remove_sender(&self, sender: CoreStatsSender) {
+        if self.sender.send(MonitorMessage::AddSender(sender)).is_err() {}
     }
 }
 
@@ -79,15 +75,17 @@ impl Drop for SystemMonitor {
 struct ThreadData {
     receiver: MonitorReceiver,
     executor: ExecutorControlObj,
+    senders: Vec<CoreStatsSender>,
 }
 impl ThreadData {
     /// launch the long running system monitor thread
-    fn spawn(
-        receiver: MonitorReceiver,
-        executor: ExecutorControlObj,
-    ) -> Option<std::thread::JoinHandle<()>> {
+    fn spawn(receiver: MonitorReceiver, executor: ExecutorControlObj) -> Option<std::thread::JoinHandle<()>> {
         let thread = thread::spawn(move || {
-            let mut res = Self { receiver, executor };
+            let mut res = Self {
+                receiver,
+                executor,
+                senders: Vec::new(),
+            };
             res.run()
         });
         Some(thread)
@@ -100,17 +98,72 @@ impl ThreadData {
             match self.receiver.recv() {
                 Err(_e) => break,
                 Ok(m) => match m {
-                    MonitorMessage::ExecutorStats(_stats) => {}
                     MonitorMessage::Terminate => break,
                     MonitorMessage::Parked(id) => {
                         log::info!("System Monitor: Executor {} is parked", id);
                         self.executor.parked_executor(id);
-                    }
+                    },
                     MonitorMessage::Terminated(id) => self.executor.joinable_executor(id),
+                    MonitorMessage::AddSender(sender) => self.add_sender(sender),
+                    MonitorMessage::RemoveSender(sender) => self.remove_sender(sender),
+                    MonitorMessage::ExecutorStats(stats) => self.try_fwd(CoreStatsMessage::ExecutorStats(stats)),
+                    MonitorMessage::SchedStats(stats) => self.try_fwd(CoreStatsMessage::SchedStats(stats)),
+
+                    #[allow(unreachable_patterns)]
+                    _ => log::info!("System Monitor recevied an unhandled message {:#?}", m),
                 },
             }
         }
         log::info!("System Monitor is stopped");
+    }
+
+    // add sender if not already in the list
+    fn add_sender(&mut self, sender: CoreStatsSender) {
+        for s in &self.senders {
+            if sender.sender.same_channel(&s.sender) {
+                return;
+            }
+        }
+        self.senders.push(sender);
+    }
+
+    // remove sender if in the list (drain_filter() is still experimental)
+    fn remove_sender(&mut self, sender: CoreStatsSender) {
+        let mut index = usize::MAX;
+        for (idx, s) in self.senders.iter().enumerate() {
+            if sender.sender.same_channel(&s.sender) {
+                index = idx;
+                break;
+            }
+        }
+        if index != usize::MAX {
+            self.senders.swap_remove(index);
+        }
+    }
+
+    fn try_fwd(&mut self, msg: CoreStatsMessage) {
+        use crossbeam_channel::TrySendError;
+        match self.senders.len() {
+            0 => (),
+            1 => {
+                if let Err(e) = self.senders[0].try_send(msg) {
+                    if let TrySendError::<_>::Disconnected(_) = e {
+                        self.senders.clear()
+                    }
+                }
+            },
+            _ => {
+                let mut alive: Vec<CoreStatsSender> = Vec::new();
+                for s in self.senders.drain(..) {
+                    match s.try_send(msg) {
+                        Ok(()) => alive.push(s),
+                        Err(TrySendError::<_>::Full(_)) => alive.push(s),
+                        _ => (),
+                    }
+                }
+                self.senders = alive;
+            },
+        }
     }
 }
 

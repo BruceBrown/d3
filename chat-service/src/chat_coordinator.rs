@@ -55,10 +55,7 @@ use std::net::SocketAddr;
 ///
 /// Normally, we'd add a new component to manage routing with multiple chat rooms. However, we're going to cheap
 /// out and just have a single room.
-pub fn configure(
-    settings: &Settings,
-    components: &[ComponentInfo],
-) -> Result<Option<ComponentSender>, ComponentError> {
+pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Option<ComponentSender>, ComponentError> {
     // ensure our service is configure in services
     if !settings.services.contains(&Service::ChatServer) {
         log::debug!("chat service is not configured");
@@ -79,7 +76,7 @@ pub fn configure(
                         components: components.to_owned(),
                         mutable,
                     })
-                }
+                },
                 #[allow(unreachable_patterns)] // in case it becomes reachable, we want to know
                 _ => None,
             };
@@ -88,10 +85,7 @@ pub fn configure(
                     // maybe move up and into the match
                     let mutable = coordinator.mutable.lock().unwrap();
                     if coordinator.bind_addr.parse::<SocketAddr>().is_err() {
-                        log::error!(
-                            "Unable to parse {} into a SocketAddr",
-                            &coordinator.bind_addr
-                        );
+                        log::error!("Unable to parse {} into a SocketAddr", &coordinator.bind_addr);
                         continue;
                     }
                     if !mutable.kv.contains_key(&"name_prompt".to_string()) {
@@ -102,13 +96,7 @@ pub fn configure(
                 log::debug!("chat server selected configuration: {:#?}", v);
                 let (m, sender) = executor::connect::<_, NetCmd>(coordinator);
                 // save out network sender until we give it away during start
-                m.lock()
-                    .unwrap()
-                    .mutable
-                    .lock()
-                    .unwrap()
-                    .my_sender
-                    .replace(sender);
+                m.lock().unwrap().mutable.lock().unwrap().my_sender.replace(sender);
                 let sender = executor::and_connect::<_, ComponentCmd>(&m);
                 return Ok(Some(sender));
             }
@@ -154,13 +142,7 @@ impl MutableCoordinatorData {
             // save the chat sender in the coordinator
             self.inst_chat_sender.replace(sender.clone());
             // save the chat sender in the instance
-            instance
-                .lock()
-                .unwrap()
-                .my_sender
-                .lock()
-                .unwrap()
-                .replace(sender);
+            instance.lock().unwrap().my_sender.lock().unwrap().replace(sender);
             // create a net sender for the instance
             let sender = executor::and_connect::<_, NetCmd>(&instance);
             // save the sender in the instance
@@ -205,12 +187,12 @@ impl Machine<ComponentCmd> for ChatCoordinator {
                     &self.net_sender,
                     NetCmd::BindListener(self.bind_addr.to_string(), my_sender.unwrap()),
                 );
-            }
+            },
             ComponentCmd::Stop => {
                 mutable.inst_net_sender.take();
                 mutable.inst_chat_sender.take();
                 mutable.my_sender.take();
-            }
+            },
             _ => (),
         }
     }
@@ -257,12 +239,7 @@ struct ChatInstance {
     mutable: Mutex<MutableData>,
 }
 impl ChatInstance {
-    fn new(
-        conn_id: u128,
-        kv: HashMap<String, String>,
-        buf_size: usize,
-        net_sender: NetSender,
-    ) -> Self {
+    fn new(conn_id: u128, kv: HashMap<String, String>, buf_size: usize, net_sender: NetSender) -> Self {
         Self {
             conn_id,
             kv,
@@ -351,10 +328,7 @@ impl ChatInstance {
         }
         send_cmd(
             &sender,
-            ChatCmd::AddSink(
-                conn_uuid,
-                self.my_sender.lock().unwrap().as_ref().unwrap().clone(),
-            ),
+            ChatCmd::AddSink(conn_uuid, self.my_sender.lock().unwrap().as_ref().unwrap().clone()),
         );
         mutable.producers.insert(conn_uuid, sender);
         if !mutable.names.contains_key(&conn_uuid) {
@@ -416,13 +390,9 @@ impl Machine<ChatCmd> for ChatInstance {
     fn receive(&self, cmd: ChatCmd) {
         //log::trace!("echo instance {:#?}", &cmd);
         match cmd {
-            ChatCmd::Instance(conn_id, sender, settings::Component::ChatConsumer) => {
-                self.add_consumer(conn_id, sender)
-            }
+            ChatCmd::Instance(conn_id, sender, settings::Component::ChatConsumer) => self.add_consumer(conn_id, sender),
             ChatCmd::RemoveSink(conn_id) => self.remove_sink(conn_id),
-            ChatCmd::Instance(conn_id, sender, settings::Component::ChatProducer) => {
-                self.add_producer(conn_id, sender)
-            }
+            ChatCmd::Instance(conn_id, sender, settings::Component::ChatProducer) => self.add_producer(conn_id, sender),
             ChatCmd::NewData(conn_id, bytes) => self.new_data(conn_id, bytes),
             _ => (),
         }
@@ -445,5 +415,4 @@ impl Machine<NetCmd> for ChatInstance {
 }
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

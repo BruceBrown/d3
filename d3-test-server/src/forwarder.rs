@@ -69,20 +69,14 @@ struct RunParams {
 impl From<settings::FieldMap> for RunParams {
     fn from(map: settings::FieldMap) -> Self {
         Self {
-            machine_count: *map
-                .get(&settings::Field::machines)
-                .expect("machines missing"),
-            messages: *map
-                .get(&settings::Field::messages)
-                .expect("messages missing"),
-            iterations: *map
-                .get(&settings::Field::iterations)
-                .expect("iterations missing"),
+            machine_count: *map.get(&settings::Field::machines).expect("machines missing"),
+            messages: *map.get(&settings::Field::messages).expect("messages missing"),
+            iterations: *map.get(&settings::Field::iterations).expect("iterations missing"),
             forwarding_multiplier: *map
                 .get(&settings::Field::forwarding_multiplier)
                 .expect("forwarding_multiplier missing"),
             timeout: std::time::Duration::from_secs(
-                *map.get(&settings::Field::timeout).expect("timeout missing") as u64,
+                *map.get(&settings::Field::timeout).expect("timeout missing") as u64
             ),
             unbound_queue: *map.get(&settings::Field::unbound_queue).unwrap_or(&0) != 0,
         }
@@ -106,7 +100,7 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
 
     daisy_chain.setup();
     let t = std::time::Instant::now();
-    for _ in 0..params.iterations {
+    for _ in 0 .. params.iterations {
         daisy_chain.run();
     }
     log::info!("completed daisy-chain run in {:#?}", t.elapsed());
@@ -134,12 +128,12 @@ fn run_fanout_fanin(settings: &ForwarderSettings) {
     fanout_fanin.machine_count = params.machine_count;
     fanout_fanin.message_count = params.machine_count;
     fanout_fanin.bound_queue = !params.unbound_queue;
-   
+
     fanout_fanin.duration = params.timeout;
 
     fanout_fanin.setup();
     let t = std::time::Instant::now();
-    for _ in 0..params.iterations {
+    for _ in 0 .. params.iterations {
         fanout_fanin.run();
     }
     log::info!("completed fanout_fanin run in {:#?}", t.elapsed());
@@ -157,14 +151,8 @@ fn run_chaos_monkey(settings: &ForwarderSettings) {
         Some(map) => merge_maps(settings.default.clone(), map.clone()),
         None => settings.default.clone(),
     };
-    let inflection_value = *fields
-        .get(&settings::Field::inflection_value)
-        .unwrap_or(&1usize);
-    log::info!(
-        "chaos_monkey: {:?}, inflection_value {}",
-        params,
-        inflection_value
-    );
+    let inflection_value = *fields.get(&settings::Field::inflection_value).unwrap_or(&1usize);
+    log::info!("chaos_monkey: {:?}, inflection_value {}", params, inflection_value);
 
     let mut chaos_monkey = ChaosMonkeyDriver::default();
     chaos_monkey.machine_count = params.machine_count;
@@ -172,10 +160,10 @@ fn run_chaos_monkey(settings: &ForwarderSettings) {
     chaos_monkey.bound_queue = !params.unbound_queue;
     chaos_monkey.duration = params.timeout;
     chaos_monkey.inflection_value = inflection_value as u32;
- 
+
     chaos_monkey.setup();
     let t = std::time::Instant::now();
-    for _ in 0..params.iterations {
+    for _ in 0 .. params.iterations {
         chaos_monkey.run();
     }
     log::info!("completed chaos_monkey run in {:#?}", t.elapsed());

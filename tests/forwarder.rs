@@ -1,24 +1,23 @@
 #![feature(test)]
 extern crate test;
 
-#[macro_use]
-extern crate log;
+#[macro_use] extern crate log;
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
-    use std::time::Duration;
     use std::panic;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread;
+    use std::time::Duration;
 
     use d3_core::executor;
     use d3_core::machine_impl::*;
     use d3_dev_instruction_sets::{TestMessage, TestStruct};
 
-    use d3_test_drivers::forwarder::Forwarder;
     use d3_test_drivers::chaos_monkey::ChaosMonkeyDriver;
     use d3_test_drivers::daisy_chain::DaisyChainDriver;
     use d3_test_drivers::fanout_fanin::FanoutFaninDriver;
+    use d3_test_drivers::forwarder::Forwarder;
 
     static BARRIER: AtomicUsize = AtomicUsize::new(0);
     // common function for wrapping a test with setup/teardown logic
@@ -28,7 +27,9 @@ mod tests {
     {
         let backoff = crossbeam::utils::Backoff::new();
         loop {
-            if 0 == BARRIER.fetch_add(1, Ordering::SeqCst) { break }
+            if 0 == BARRIER.fetch_add(1, Ordering::SeqCst) {
+                break;
+            }
             backoff.snooze();
         }
         // tweaks for more responsive testing
@@ -50,22 +51,22 @@ mod tests {
     }
 
     #[test]
-    fn create_destroy () {
+    fn create_destroy() {
         // A simple Alice machine
         struct Alice {}
         impl Machine<TestMessage> for Alice {
             fn receive(&self, _message: TestMessage) {}
         }
 
-        use d3_dev_instruction_sets::*;
         use d3_core::executor::*;
+        use d3_dev_instruction_sets::*;
 
         run_test(|| {
             let machine_count = 10;
             let mut machines: Vec<Sender<TestMessage>> = Vec::with_capacity(machine_count);
             let baseline_machine_count = get_machine_count();
             // build a bunch of alice's
-            for _ in 1..=machine_count {
+            for _ in 1 ..= machine_count {
                 let alice = Alice {};
                 let (_, sender) = executor::connect(alice);
                 machines.push(sender);
@@ -73,13 +74,17 @@ mod tests {
             // wait for them to get connected to the scheduler
             loop {
                 std::thread::yield_now();
-                if get_machine_count() == baseline_machine_count+machine_count { break }
+                if get_machine_count() == baseline_machine_count + machine_count {
+                    break;
+                }
             }
             machines.clear();
             // wait for the scheduler/executor to disconnect them all
             loop {
                 std::thread::yield_now();
-                if get_machine_count() == baseline_machine_count { break }
+                if get_machine_count() == baseline_machine_count {
+                    break;
+                }
             }
         });
     }
@@ -110,7 +115,7 @@ mod tests {
                 TestMessage::TestStruct(results) => {
                     assert_eq!(results.from_id, data.from_id);
                     assert_eq!(results.received_by, 1);
-                }
+                },
                 _ => assert_eq!(true, false),
             }
         });
@@ -176,7 +181,7 @@ mod tests {
 
             let iterations = 2;
             daisy_chain.setup();
-            for _ in 0..iterations {
+            for _ in 0 .. iterations {
                 daisy_chain.run();
             }
             DaisyChainDriver::teardown(daisy_chain);
@@ -194,7 +199,7 @@ mod tests {
             daisy_chain.duration = Duration::from_secs(15);
             let iterations = 2;
             daisy_chain.setup();
-            for _ in 0..iterations {
+            for _ in 0 .. iterations {
                 daisy_chain.run();
             }
             DaisyChainDriver::teardown(daisy_chain);
@@ -209,7 +214,7 @@ mod tests {
             fanout_fanin.message_count = 5;
             let iterations = 2;
             fanout_fanin.setup();
-            for _ in 0..iterations {
+            for _ in 0 .. iterations {
                 fanout_fanin.run();
             }
             FanoutFaninDriver::teardown(fanout_fanin);
@@ -225,7 +230,7 @@ mod tests {
             chaos_monkey.inflection_value = 19;
             let iterations = 2;
             chaos_monkey.setup();
-            for _ in 0..iterations {
+            for _ in 0 .. iterations {
                 chaos_monkey.run();
             }
             ChaosMonkeyDriver::teardown(chaos_monkey);

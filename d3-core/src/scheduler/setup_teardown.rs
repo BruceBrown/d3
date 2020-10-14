@@ -57,13 +57,43 @@ impl Server {
             _ => log::error!("Server not running, unable to assign machine."),
         }
     }
+    /// add a stats sender to the system monitor
+    fn add_core_stats_sender(sender: CoreStatsSender) {
+        match &server.borrow().monitor {
+            ServerField::Monitor(monitor) => monitor.add_sender(sender),
+            _ => log::error!("Server not running, unable to add stats sender."),
+        }
+    }
+    /// remove a stats sender to the system monitor
+    fn remove_core_stats_sender(sender: CoreStatsSender) {
+        match &server.borrow().monitor {
+            ServerField::Monitor(monitor) => monitor.remove_sender(sender),
+            _ => log::error!("Server not running, unable to add stats sender."),
+        }
+    }
+    /// wake executor threads
+    pub fn wake_executor_threads() {
+        match &server.borrow().executor {
+            ServerField::Executor(executor) => executor.wake_parked_threads(),
+            _ => log::error!("Server not running, unable to wake executor threads."),
+        }
+    }
 }
+
+pub fn add_core_stats_sender(sender: CoreStatsSender) { Server::add_core_stats_sender(sender); }
+
+pub fn remove_core_stats_sender(sender: CoreStatsSender) { Server::remove_core_stats_sender(sender); }
 
 /// start the server
 pub fn start_server() {
-    // startup consists of several phases. The first is collecting assest from
-    // the components. Then, using the assets, we start things up.
     log::info!("starting server");
+    if get_executor_count() == 0 {
+        let num = num_cpus::get();
+        // if we have enough, spare one for the sched + overhead
+        let num = if num > 2 { num - 1 } else { num };
+        set_executor_count(num);
+        log::info!("setting executor count to {}", num);
+    }
     server_state.store(ServerState::Initializing);
 
     let monitor_factory = SystemMonitorFactory::new();
@@ -71,11 +101,9 @@ pub fn start_server() {
     let scheduler_factory = sched_factory::create_sched_factory();
     executor_factory.with_workers(get_executor_count());
 
-    let executor =
-        executor_factory.start(monitor_factory.get_sender(), scheduler_factory.get_sender());
+    let executor = executor_factory.start(monitor_factory.get_sender(), scheduler_factory.get_sender());
     let monitor = monitor_factory.start(Arc::clone(&executor));
-    let scheduler =
-        scheduler_factory.start(monitor_factory.get_sender(), executor_factory.get_queues());
+    let scheduler = scheduler_factory.start(monitor_factory.get_sender(), executor_factory.get_queues());
 
     let mut s = server.borrow_mut();
     s.monitor = ServerField::Monitor(monitor);
@@ -115,15 +143,11 @@ pub fn stop_server() {
 /// server have no effect.
 #[allow(dead_code)]
 #[allow(non_upper_case_globals)]
-pub static executor_count: AtomicCell<usize> = AtomicCell::new(4);
+pub static executor_count: AtomicCell<usize> = AtomicCell::new(0);
 #[allow(dead_code)]
-pub fn get_executor_count() -> usize {
-    executor_count.load()
-}
+pub fn get_executor_count() -> usize { executor_count.load() }
 #[allow(dead_code)]
-pub fn set_executor_count(new: usize) {
-    executor_count.store(new);
-}
+pub fn set_executor_count(new: usize) { executor_count.store(new); }
 
 #[cfg(test)]
 pub mod tests {

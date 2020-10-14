@@ -64,9 +64,7 @@ impl Network {
 }
 
 #[inline]
-pub fn get_network_sender() -> NetSender {
-    Network::get_sender()
-}
+pub fn get_network_sender() -> NetSender { Network::get_sender() }
 
 /// start the network
 pub fn start_network() {

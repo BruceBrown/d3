@@ -49,9 +49,7 @@ pub fn configure(
 struct ConsumerComponent {}
 
 impl ConsumerComponent {
-    pub fn new() -> Self {
-        Self {}
-    }
+    pub fn new() -> Self { Self {} }
 
     // create a consumer for the new session
     fn create_instance(&self, conn_uuid: u128, any_sender: AnySender) {
@@ -74,11 +72,9 @@ impl Machine<ComponentCmd> for ConsumerComponent {
 
     fn receive(&self, cmd: ComponentCmd) {
         match cmd {
-            ComponentCmd::NewSession(conn_uuid, service, any_sender)
-                if service == Service::ChatServer =>
-            {
+            ComponentCmd::NewSession(conn_uuid, service, any_sender) if service == Service::ChatServer => {
                 self.create_instance(conn_uuid, any_sender)
-            }
+            },
             ComponentCmd::Start => (),
             ComponentCmd::Stop => (),
             _ => (),
@@ -115,11 +111,7 @@ impl ChatInstance {
             log::debug!("consumer {} producer is set", self.session_id);
         } else {
             // otherwise, this is a producer we'll forward to
-            log::debug!(
-                "consumer {} sending input to producer {}",
-                self.session_id,
-                conn_uuid
-            );
+            log::debug!("consumer {} sending input to producer {}", self.session_id, conn_uuid);
             mutable.senders.insert(conn_uuid, sender);
         }
     }
@@ -135,11 +127,7 @@ impl ChatInstance {
             }
         } else {
             // otherwise, stop forwarding to it
-            log::debug!(
-                "consumer {} removed producer {}",
-                self.session_id,
-                conn_uuid
-            );
+            log::debug!("consumer {} removed producer {}", self.session_id, conn_uuid);
             mutable.senders.remove(&conn_uuid);
         }
     }

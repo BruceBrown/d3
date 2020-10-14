@@ -25,6 +25,7 @@ extern crate log;
 mod foundation {
     use super::*;
     pub mod machine;
+    pub mod simple_event_timer;
     pub mod thread_safe;
 }
 mod tls {
@@ -39,8 +40,8 @@ mod channel {
     use super::*;
     use crate::foundation::machine::*;
     use crate::tls::tls_executor::ExecutorData;
-    pub mod machine_channel;
     mod connection;
+    pub mod machine_channel;
     pub mod receiver;
     pub mod sender;
 }
@@ -56,7 +57,7 @@ mod scheduler {
     #![allow(dead_code)]
     use super::*;
     use crate::collective::machine::*;
-    use crate::foundation::machine::*;
+    use crate::foundation::{machine::*, simple_event_timer::*};
     use crate::tls::{collective::*, tls_executor::*};
     pub mod executor;
     pub mod machine;
@@ -64,7 +65,7 @@ mod scheduler {
     pub mod sched;
     mod sched_factory;
     pub mod setup_teardown;
-    mod traits;
+    pub mod traits;
 }
 
 // publish the parts needed outside of the core
@@ -79,10 +80,7 @@ pub mod machine_impl {
     pub use crate::collective::machine::MachineBuilder;
     pub use crate::foundation::{machine::Machine, machine::MachineImpl};
     pub use crate::tls::{
-        collective::{
-            CollectiveState, MachineAdapter, MachineDependentAdapter, MachineState,
-            ShareableMachine,
-        },
+        collective::{CollectiveState, MachineAdapter, MachineDependentAdapter, MachineState, ShareableMachine},
         tls_executor::{
             tls_executor_data, CollectiveSenderAdapter, ExecutorDataField, ExecutorStats,
             SharedCollectiveSenderAdapter, Task, TrySendError,
@@ -94,18 +92,23 @@ pub mod machine_impl {
 // machines into the collective.
 pub mod executor {
     pub use crate::scheduler::{
+        executor::{get_time_slice, set_time_slice},
         machine::{
-            and_connect, and_connect_unbounded, and_connect_with_capacity, connect,
-            connect_unbounded, connect_with_capacity, get_default_channel_capacity,
-            set_default_channel_capacity,
+            and_connect, and_connect_unbounded, and_connect_with_capacity, connect, connect_unbounded,
+            connect_with_capacity, get_default_channel_capacity, set_default_channel_capacity,
         },
         sched::{
-            get_machine_count_estimate, get_selector_maintenance_duration,
+            get_machine_count, get_machine_count_estimate, get_selector_maintenance_duration,
             set_machine_count_estimate, set_selector_maintenance_duration,
-            get_machine_count,
-        },
-        executor::{get_time_slice, set_time_slice,
         },
         setup_teardown::{get_executor_count, set_executor_count, start_server, stop_server},
     };
+    pub mod stats {
+        pub use crate::scheduler::{
+            sched::SchedStats,
+            setup_teardown::{add_core_stats_sender, remove_core_stats_sender},
+            traits::{CoreStatsMessage, CoreStatsSender},
+        };
+        pub use crate::tls::tls_executor::ExecutorStats;
+    }
 }

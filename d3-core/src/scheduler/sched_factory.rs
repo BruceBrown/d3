@@ -9,9 +9,7 @@ use super::*;
 ///
 
 /// create the factory for creating and starting the scheduler
-pub fn create_sched_factory() -> impl SchedulerFactory {
-    Factory::new()
-}
+pub fn create_sched_factory() -> impl SchedulerFactory { Factory::new() }
 
 struct Factory {
     sender: SchedSender,
@@ -24,9 +22,7 @@ impl Factory {
         Self { sender, receiver }
     }
     /// get the sender for the scheduler
-    pub fn get_sender(&self) -> SchedSender {
-        self.sender.clone()
-    }
+    pub fn get_sender(&self) -> SchedSender { self.sender.clone() }
     /// start the scheduler
     pub fn create_and_start(
         &self,
@@ -40,15 +36,9 @@ impl Factory {
 }
 
 impl SchedulerFactory for Factory {
-    fn get_sender(&self) -> SchedSender {
-        self.sender.clone()
-    }
+    fn get_sender(&self) -> SchedSender { self.sender.clone() }
     // start must return a sized object trait, I prefer Arc over Box
-    fn start(
-        &self,
-        monitor: MonitorSender,
-        queues: (TaskInjector, SchedTaskInjector),
-    ) -> Arc<dyn Scheduler> {
+    fn start(&self, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Arc<dyn Scheduler> {
         Arc::new(self.create_and_start(monitor, queues))
     }
 }

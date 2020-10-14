@@ -1,6 +1,5 @@
-
+use self::forwarder::{ChaosMonkey, Forwarder};
 use super::*;
-use self::forwarder::{Forwarder, ChaosMonkey};
 
 /// ChaosMonkey will setup a network of machines in which a message received by any machine
 /// can be forwarded to any other machine, including itself. To break the cyclic nature of this,
@@ -11,34 +10,34 @@ use self::forwarder::{Forwarder, ChaosMonkey};
 /// it will cease to be forwarded and a notification will be sent indicating that the
 /// message forwarding for that message is complete. When all messages reach 0, the test
 /// is complete.
-/// 
+///
 /// For example, if the inflection is 3, the message with fwd 0, 1, 2, 3, 3, 2, 1, 0.
 /// If there are 400 messages, and an inflection of 9 20x400 messages will be propagated.
 /// This is purely random, if you 4000 machines, in this scenerio each machine would be
 /// visted by ~2 messages.
-/// 
+///
 /// The message count represents concurrent number of messages flowing through the machines,
 /// while the inflection value represents the lifetime of the message. Varing the machine count
 /// varies the number of messages a machine may receive.
-/// 
+///
 #[derive(Debug, SmartDefault)]
 pub struct ChaosMonkeyDriver {
-    #[default=4000]
+    #[default = 2000]
     pub machine_count: usize,
 
-    #[default=200]
+    #[default = 100]
     pub message_count: usize,
 
-    #[default=39]
+    #[default = 29]
     pub inflection_value: u32,
 
-    #[default=true]
+    #[default = true]
     pub bound_queue: bool,
 
-    #[default(Duration::from_secs(5))]
+    #[default(Duration::from_secs(10))]
     pub duration: Duration,
 
-    #[default(Vec::with_capacity(4010))]
+    #[default(Vec::with_capacity(2010))]
     senders: Vec<TestMessageSender>,
     receiver: Option<TestMessageReceiver>,
     baseline: usize,
@@ -47,7 +46,7 @@ impl ChaosMonkeyDriver {
     pub fn setup(&mut self) {
         self.baseline = executor::get_machine_count();
         // we're going to create N machines, each having N senders, plus a notifier.
-        for idx in 1..=self.machine_count {
+        for idx in 1 ..= self.machine_count {
             let (_f, s) = if self.bound_queue {
                 executor::connect(Forwarder::new(idx))
             } else {
@@ -60,20 +59,20 @@ impl ChaosMonkeyDriver {
         // may need to build a partial mapping for large config, let's see
         for s1 in &self.senders {
             for s2 in &self.senders {
-            s2.send(TestMessage::AddSender(s1.clone())).unwrap();
+                s2.send(TestMessage::AddSender(s1.clone())).unwrap();
             }
             // chaos monkey ignores the count
             s1.send(TestMessage::Notify(notifier.clone(), 0)).unwrap();
         }
         let (sender, receiver) = channel();
-        notifier
-            .send(TestMessage::Notify(sender, self.message_count))
-            .unwrap();
+        notifier.send(TestMessage::Notify(sender, self.message_count)).unwrap();
         self.receiver = Some(receiver);
         // wait for the scheduler/executor to get them all assigned
         loop {
             thread::yield_now();
-            if executor::get_machine_count() >= self.baseline + self.machine_count-1 { break }
+            if executor::get_machine_count() >= self.baseline + self.machine_count - 1 {
+                break;
+            }
         }
     }
     pub fn teardown(chaos_monkey: Self) {
@@ -87,13 +86,15 @@ impl ChaosMonkeyDriver {
         // wait for the machines to all go away
         loop {
             thread::yield_now();
-            if baseline == executor::get_machine_count() { break }
-        }    
+            if baseline == executor::get_machine_count() {
+                break;
+            }
+        }
     }
     pub fn run(&self) {
-        let range = Uniform::from(0..self.senders.len());
+        let range = Uniform::from(0 .. self.senders.len());
         let mut rng = rand::rngs::OsRng::default();
-        for _ in 0..self.message_count {
+        for _ in 0 .. self.message_count {
             let m = ChaosMonkey::new(self.inflection_value);
             let idx = range.sample(&mut rng);
             self.senders[idx].send(m.as_variant()).unwrap();

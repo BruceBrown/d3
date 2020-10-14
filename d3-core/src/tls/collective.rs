@@ -41,38 +41,24 @@ impl MachineAdapter {
         }
     }
     #[inline]
-    pub const fn get_id(&self) -> Uuid {
-        self.id
-    }
+    pub const fn get_id(&self) -> Uuid { self.id }
     #[inline]
-    pub fn get_and_clear_once(&self) -> bool {
-        self.once.swap(false, Ordering::SeqCst)
-    }
+    pub fn get_and_clear_once(&self) -> bool { self.once.swap(false, Ordering::SeqCst) }
     #[inline]
-    pub fn get_key(&self) -> usize {
-        self.key
-    }
+    pub fn get_key(&self) -> usize { self.key }
     #[inline]
-    pub fn get_state(&self) -> CollectiveState {
-        self.state.get()
-    }
+    pub fn get_state(&self) -> CollectiveState { self.state.get() }
     #[inline]
-    pub fn set_state(&self, new: CollectiveState) {
-        self.state.set(new);
-    }
+    pub fn set_state(&self, new: CollectiveState) { self.state.set(new); }
     #[inline]
-    pub fn clone_state(&self) -> MachineState {
-        self.state.clone()
-    }
+    pub fn clone_state(&self) -> MachineState { self.state.clone() }
     // the remainder are implemented via a trait object
     #[inline]
-    pub fn sel_recv<'a>(&'a self, sel: &mut crossbeam::Select<'a>) -> usize {
-        self.normalized_adapter.sel_recv(sel)
-    }
+    pub fn sel_recv<'a>(&'a self, sel: &mut crossbeam::Select<'a>) -> usize { self.normalized_adapter.sel_recv(sel) }
     #[inline]
     pub fn receive_cmd(&self, time_slice: Duration, stats: &mut ExecutorStats) {
         self.normalized_adapter
-            .receive_cmd(&self.state, self.get_and_clear_once(), time_slice, stats)
+            .receive_cmd(&self.state, self.get_and_clear_once(), self.id, time_slice, stats)
     }
     #[inline]
     pub fn try_recv_task(&self, machine: &ShareableMachine) -> Option<Task> {
@@ -116,5 +102,12 @@ pub trait MachineDependentAdapter: Send + Sync + fmt::Debug {
     /// Complete the select.recv() with a try_recv
     fn try_recv_task(&self, machine: &ShareableMachine) -> Option<Task>;
     /// Deliver the instruction into the machine.
-    fn receive_cmd(&self, state: &MachineState, once: bool, time_slice: Duration, stats: &mut ExecutorStats);
+    fn receive_cmd(
+        &self,
+        state: &MachineState,
+        once: bool,
+        uuid: Uuid,
+        time_slice: Duration,
+        stats: &mut ExecutorStats,
+    );
 }

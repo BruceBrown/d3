@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// This is the Forwarder, the Swiss Army Knife of machines. It implements the TestMessage instruction set.
@@ -35,9 +34,7 @@ pub struct ForwarderMutable {
 }
 impl ForwarderMutable {
     /// get an index suitable for obtaining a random sender from the senders vector
-    fn get_monkey_fwd(&mut self) -> usize {
-        self.range.sample(&mut self.rng)
-    }
+    fn get_monkey_fwd(&mut self) -> usize { self.range.sample(&mut self.rng) }
     fn drop_all_senders(&mut self) {
         self.senders.clear();
         let _ = self.notify_sender.take();
@@ -51,9 +48,7 @@ impl Forwarder {
             ..Default::default()
         }
     }
-    pub fn get_id(&self) -> usize {
-        self.id
-    }
+    pub fn get_id(&self) -> usize { self.id }
     pub fn get_and_clear_received_count(&self) -> usize {
         let received_count = self.received_count.load(Ordering::SeqCst);
         self.received_count.store(0, Ordering::SeqCst);
@@ -100,18 +95,19 @@ impl Machine<TestMessage> for Forwarder {
                 counter_max,
                 counter_mutation,
             } => ChaosMonkey {
-                    counter,
-                    counter_max,
-                    counter_mutation,
-                }.perform_action(&mut mutable),
+                counter,
+                counter_max,
+                counter_mutation,
+            }
+            .perform_action(&mut mutable),
             TestMessage::TestData(_seq) => mutable.senders.iter().for_each(|sender| {
-                for _ in 0..mutable.forwarding_multiplier {
+                for _ in 0 .. mutable.forwarding_multiplier {
                     let count = self.send_count.fetch_add(1, Ordering::SeqCst);
                     sender.send(TestMessage::TestData(count)).unwrap()
                 }
             }),
             _ => mutable.senders.iter().for_each(|sender| {
-                for _ in 0..mutable.forwarding_multiplier {
+                for _ in 0 .. mutable.forwarding_multiplier {
                     sender.send(message.clone()).unwrap()
                 }
             }),
@@ -119,7 +115,9 @@ impl Machine<TestMessage> for Forwarder {
         // send notification if we've met the criteria
         if self.received_count.load(Ordering::SeqCst) == mutable.notify_count {
             if let Some(notifier) = mutable.notify_sender.as_ref() {
-                notifier.send(TestMessage::TestData(self.received_count.load(Ordering::SeqCst))).expect("failed to notify");
+                notifier
+                    .send(TestMessage::TestData(self.received_count.load(Ordering::SeqCst)))
+                    .expect("failed to notify");
                 self.received_count.store(0, Ordering::SeqCst);
                 self.send_count.store(0, Ordering::SeqCst);
             }
@@ -137,7 +135,6 @@ enum ChaosMonkeyAction {
     Forward,
     Notify,
 }
-
 
 #[derive(Debug)]
 pub struct ChaosMonkey {
@@ -161,12 +158,12 @@ impl ChaosMonkey {
             ChaosMonkeyAction::Forward => {
                 let idx = forwarder.get_monkey_fwd();
                 forwarder.senders[idx].send(self.as_variant()).unwrap();
-            }
+            },
             ChaosMonkeyAction::Notify => {
                 if let Some(notifier) = forwarder.notify_sender.as_ref() {
                     notifier.send(TestMessage::TestData(0)).unwrap();
                 }
-            }
+            },
         }
     }
     pub fn as_variant(&self) -> TestMessage {
@@ -176,34 +173,32 @@ impl ChaosMonkey {
             counter_mutation: self.counter_mutation,
         }
     }
-    // advance the counter and return the action 
+    // advance the counter and return the action
     fn advance_counter(&mut self, forwarder: &mut ForwarderMutable) -> ChaosMonkeyAction {
         match self.counter {
             0 => match self.counter_mutation {
                 ChaosMonkeyMutation::Decrement => ChaosMonkeyAction::Notify,
                 ChaosMonkeyMutation::Increment => {
                     // set the range
-                    forwarder.range = Uniform::from(0..forwarder.senders.len());
+                    forwarder.range = Uniform::from(0 .. forwarder.senders.len());
                     self.counter += 1;
                     ChaosMonkeyAction::Forward
-                }
+                },
             },
             c if c >= self.counter_max => {
                 match self.counter_mutation {
                     ChaosMonkeyMutation::Decrement => self.counter -= 1,
-                    ChaosMonkeyMutation::Increment => {
-                        self.counter_mutation = ChaosMonkeyMutation::Decrement
-                    }
+                    ChaosMonkeyMutation::Increment => self.counter_mutation = ChaosMonkeyMutation::Decrement,
                 }
                 ChaosMonkeyAction::Forward
-            }
+            },
             _ => {
                 match self.counter_mutation {
                     ChaosMonkeyMutation::Decrement => self.counter -= 1,
                     ChaosMonkeyMutation::Increment => self.counter += 1,
                 }
                 ChaosMonkeyAction::Forward
-            }
+            },
         }
     }
 }

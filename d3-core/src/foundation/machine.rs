@@ -51,7 +51,7 @@ where
     /// notification that the machine has become disconnect and will no longer receive instructions
     fn disconnected(&self) {}
     /// notification that the machine has become connected and may receive instructions
-    fn connected(&self) {}
+    fn connected(&self, _uuid: Uuid) {}
 }
 
 /// Adding the machine implementation to Mutex
@@ -61,10 +61,7 @@ where
     T: Machine<P>,
     P: MachineImpl,
 {
-    fn receive(&self, cmd: P) {
-        self.lock().unwrap().receive(cmd);
-    }
-    fn disconnected(&self) {
-        self.lock().unwrap().disconnected();
-    }
+    fn receive(&self, cmd: P) { self.lock().unwrap().receive(cmd); }
+    fn disconnected(&self) { self.lock().unwrap().disconnected(); }
+    fn connected(&self, uuid: Uuid) { self.lock().unwrap().connected(uuid); }
 }

@@ -144,11 +144,8 @@ fn run_server(settings: &settings::Settings) {
         forwarder::run(&settings);
     }
 
-    // we now have an echo server... if its configured, run it
-    if settings.services.contains(&settings::Service::EchoServer) {
-        log::info!("echo server will run for 60 seconds");
-        std::thread::sleep(std::time::Duration::from_secs(60));
-    }
+    let duration = std::time::Duration::from_secs(settings.test_server_duration * 60);
+    std::thread::sleep(duration);
 }
 
 #[cfg(test)]
@@ -228,9 +225,7 @@ mod tests {
         state: AtomicCell<AliceCmd>,
     }
     impl Alice {
-        fn get_state(&self) -> AliceCmd {
-            self.state.load()
-        }
+        fn get_state(&self) -> AliceCmd { self.state.load() }
     }
     impl Machine<AliceCmd> for Alice {
         fn disconnected(&self) {
@@ -240,15 +235,15 @@ mod tests {
             match cmd {
                 AliceCmd::Init => {
                     log::error!("I'm Alice, I don't need to be initialized again.");
-                }
+                },
                 AliceCmd::Start => {
                     log::info!("I'm Alice, and I'm Starting up.");
                     self.state.store(cmd);
-                }
+                },
                 AliceCmd::Stop => {
                     log::info!("I'm Alice, and I'm Shutting down.");
                     self.state.store(cmd);
-                }
+                },
             }
         }
     }

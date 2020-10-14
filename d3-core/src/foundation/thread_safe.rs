@@ -13,9 +13,7 @@ impl<T> fmt::Debug for SharedProtectedObject<T>
 where
     T: std::fmt::Debug + Copy,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:#?}", &self.object.load())
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{:#?}", &self.object.load()) }
 }
 
 #[allow(dead_code)]
@@ -24,17 +22,11 @@ where
     T: Copy + Eq,
 {
     #[inline]
-    pub fn get(&self) -> T {
-        self.object.load()
-    }
+    pub fn get(&self) -> T { self.object.load() }
     #[inline]
-    pub fn set(&self, new: T) {
-        self.object.store(new)
-    }
+    pub fn set(&self, new: T) { self.object.store(new) }
     #[inline]
-    pub fn compare_and_set(&self, current: T, new: T) -> T {
-        self.object.compare_and_swap(current, new)
-    }
+    pub fn compare_and_set(&self, current: T, new: T) -> T { self.object.compare_and_swap(current, new) }
 }
 
 /// ProtectedInner is a trait for providing access to an otherwise inaccessible object.

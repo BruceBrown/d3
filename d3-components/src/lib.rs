@@ -23,10 +23,8 @@
 //! Taken together, this model can be used for implementing a simple echo server all the way up to a
 //! more complex conference server, which would include audio, video, recording and translating services.
 //!
-#[macro_use]
-extern crate smart_default;
-#[macro_use]
-extern crate serde_derive;
+#[macro_use] extern crate smart_default;
+#[macro_use] extern crate serde_derive;
 
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -35,8 +33,7 @@ use std::time::Duration;
 use atomic_refcell::AtomicRefCell;
 use crossbeam::atomic::AtomicCell;
 
-#[allow(unused_imports)]
-use d3_core::executor::*;
+#[allow(unused_imports)] use d3_core::executor::*;
 use d3_core::machine_impl::*;
 use d3_derive::*;
 

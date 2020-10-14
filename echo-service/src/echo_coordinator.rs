@@ -5,10 +5,7 @@ use settings::{Coordinator, CoordinatorVariant, Settings};
 use std::net::SocketAddr;
 
 // maybe a trait would be better
-pub fn configure(
-    settings: &Settings,
-    components: &[ComponentInfo],
-) -> Result<Option<ComponentSender>, ComponentError> {
+pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Option<ComponentSender>, ComponentError> {
     // ensure our service is configure in services
     if !settings.services.contains(&Service::EchoServer) {
         log::debug!("echo service is not configured");
@@ -29,10 +26,7 @@ pub fn configure(
             };
             if let Some(coordinator) = maybe_coordinator {
                 if coordinator.bind_addr.parse::<SocketAddr>().is_err() {
-                    log::error!(
-                        "Unable to parse {} into a SocketAddr",
-                        &coordinator.bind_addr
-                    );
+                    log::error!("Unable to parse {} into a SocketAddr", &coordinator.bind_addr);
                     continue;
                 }
                 log::debug!("echo server selected configuration: {:#?}", value);
@@ -63,11 +57,8 @@ impl EchoCoordinator {
         let conn_uuid: u128 = conn_id.try_into().unwrap();
         // create an instance to handle the connection, the EchoInstance has two instruction sets.
         // Wire them both to the same instance.
-        let (instance, sender) = executor::connect::<_, EchoCmd>(EchoInstance::new(
-            conn_uuid,
-            buf_size,
-            self.net_sender.clone(),
-        ));
+        let (instance, sender) =
+            executor::connect::<_, EchoCmd>(EchoInstance::new(conn_uuid, buf_size, self.net_sender.clone()));
         instance
             .lock()
             .unwrap()
@@ -97,7 +88,7 @@ impl Machine<ComponentCmd> for EchoCoordinator {
                     &self.net_sender,
                     NetCmd::BindListener(self.bind_addr.to_string(), my_sender.unwrap()),
                 );
-            }
+            },
             ComponentCmd::Stop => (),
             _ => (),
         }
@@ -194,10 +185,7 @@ impl EchoInstance {
         // we send to the consumer, which sends to the producer, which sends back to us.
         let my_sender = self.my_sender.lock().unwrap().take().unwrap();
         send_cmd(&producer_sender, EchoCmd::AddSink(self.conn_id, my_sender));
-        send_cmd(
-            &consumer_sender,
-            EchoCmd::AddSink(self.conn_id, producer_sender),
-        );
+        send_cmd(&consumer_sender, EchoCmd::AddSink(self.conn_id, producer_sender));
         self.consumer.lock().unwrap().replace(consumer_sender);
         log::info!("all wired, saved consumer");
     }
@@ -220,12 +208,8 @@ impl Machine<EchoCmd> for EchoInstance {
     fn receive(&self, cmd: EchoCmd) {
         //log::trace!("echo instance {:#?}", &cmd);
         match cmd {
-            EchoCmd::Instance(_conn_id, sender, settings::Component::EchoConsumer) => {
-                self.add_consumer(sender)
-            }
-            EchoCmd::Instance(_conn_id, sender, settings::Component::EchoProducer) => {
-                self.add_producer(sender)
-            }
+            EchoCmd::Instance(_conn_id, sender, settings::Component::EchoConsumer) => self.add_consumer(sender),
+            EchoCmd::Instance(_conn_id, sender, settings::Component::EchoProducer) => self.add_producer(sender),
             EchoCmd::NewData(conn_id, bytes) => self.new_data(conn_id, bytes),
             _ => (),
         }

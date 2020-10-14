@@ -24,9 +24,7 @@ pub fn connect<T, P>(
     Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
 )
 where
-    T: 'static
-        + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
+    T: 'static + Machine<P> + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
     <P as MachineImpl>::Adapter: MachineBuilder,
 {
@@ -42,9 +40,7 @@ pub fn and_connect<T, P>(
     machine: &Arc<Mutex<T>>,
 ) -> Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 where
-    T: 'static
-        + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
+    T: 'static + Machine<P> + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
     <P as MachineImpl>::Adapter: MachineBuilder,
 {
@@ -66,9 +62,7 @@ pub fn connect_with_capacity<T, P>(
     Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
 )
 where
-    T: 'static
-        + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
+    T: 'static + Machine<P> + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
     <P as MachineImpl>::Adapter: MachineBuilder,
 {
@@ -85,9 +79,7 @@ pub fn and_connect_with_capacity<T, P>(
     capacity: usize,
 ) -> Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 where
-    T: 'static
-        + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
+    T: 'static + Machine<P> + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
     <P as MachineImpl>::Adapter: MachineBuilder,
 {
@@ -107,9 +99,7 @@ pub fn connect_unbounded<T, P>(
     Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
 )
 where
-    T: 'static
-        + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
+    T: 'static + Machine<P> + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
     <P as MachineImpl>::Adapter: MachineBuilder,
 {
@@ -125,9 +115,7 @@ pub fn and_connect_unbounded<T, P>(
     machine: &Arc<Mutex<T>>,
 ) -> Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
 where
-    T: 'static
-        + Machine<P>
-        + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
+    T: 'static + Machine<P> + Machine<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
     P: MachineImpl,
     <P as MachineImpl>::Adapter: MachineBuilder,
 {
@@ -146,11 +134,6 @@ pub const CHANNEL_MAX: usize = 250;
 #[allow(non_upper_case_globals)]
 pub static default_channel_max: AtomicCell<usize> = AtomicCell::new(CHANNEL_MAX);
 #[allow(dead_code)]
-pub fn get_default_channel_capacity() -> usize {
-    default_channel_max.load()
-}
+pub fn get_default_channel_capacity() -> usize { default_channel_max.load() }
 #[allow(dead_code)]
-pub fn set_default_channel_capacity(new: usize) {
-    default_channel_max.store(new);
-}
-
+pub fn set_default_channel_capacity(new: usize) { default_channel_max.store(new); }

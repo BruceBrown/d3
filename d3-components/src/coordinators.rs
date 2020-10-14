@@ -1,6 +1,5 @@
 #![allow(dead_code)]
-#[allow(unused_imports)]
-use super::*;
+#[allow(unused_imports)] use super::*;
 use crate::components::ComponentSender;
 
 /// CoordinatorInfo describes an active coordinator. It provides the coordinator type
@@ -12,16 +11,7 @@ pub struct CoordinatorInfo {
     sender: ComponentSender,
 }
 impl CoordinatorInfo {
-    pub fn new(coordinator: settings::Coordinator, sender: ComponentSender) -> Self {
-        Self {
-            coordinator,
-            sender,
-        }
-    }
-    pub fn coordinator(&self) -> settings::Coordinator {
-        self.coordinator
-    }
-    pub fn sender(&self) -> &ComponentSender {
-        &self.sender
-    }
+    pub fn new(coordinator: settings::Coordinator, sender: ComponentSender) -> Self { Self { coordinator, sender } }
+    pub fn coordinator(&self) -> settings::Coordinator { self.coordinator }
+    pub fn sender(&self) -> &ComponentSender { &self.sender }
 }

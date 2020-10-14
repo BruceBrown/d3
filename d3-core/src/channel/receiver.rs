@@ -19,48 +19,28 @@ impl<T> Receiver<T>
 where
     T: MachineImpl,
 {
-    pub fn clone_receiver(&self) -> crossbeam::Receiver<T> {
-        self.receiver.clone()
-    }
-    pub fn receiver(&self) -> &crossbeam::Receiver<T> {
-        &self.receiver
-    }
+    pub fn clone_receiver(&self) -> crossbeam::Receiver<T> { self.receiver.clone() }
+    pub fn receiver(&self) -> &crossbeam::Receiver<T> { &self.receiver }
 
-    pub fn try_recv(&self) -> Result<T, TryRecvError> {
-        self.receiver.try_recv()
-    }
+    pub fn try_recv(&self) -> Result<T, TryRecvError> { self.receiver.try_recv() }
 
-    pub fn recv(&self) -> Result<T, RecvError> {
-        self.receiver.recv()
-    }
+    pub fn recv(&self) -> Result<T, RecvError> { self.receiver.recv() }
 
     pub fn recv_timeout(&self, timeout: std::time::Duration) -> Result<T, RecvTimeoutError> {
         self.receiver.recv_timeout(timeout)
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.receiver.is_empty()
-    }
+    pub fn is_empty(&self) -> bool { self.receiver.is_empty() }
 
-    pub fn is_full(&self) -> bool {
-        self.receiver.is_full()
-    }
+    pub fn is_full(&self) -> bool { self.receiver.is_full() }
 
-    pub fn len(&self) -> usize {
-        self.receiver.len()
-    }
+    pub fn len(&self) -> usize { self.receiver.len() }
 
-    pub fn capacity(&self) -> Option<usize> {
-        self.receiver.capacity()
-    }
+    pub fn capacity(&self) -> Option<usize> { self.receiver.capacity() }
 
-    pub fn iter(&self) -> crossbeam::Iter<'_, T> {
-        self.receiver.iter()
-    }
+    pub fn iter(&self) -> crossbeam::Iter<'_, T> { self.receiver.iter() }
 
-    pub fn try_iter(&self) -> crossbeam::TryIter<'_, T> {
-        self.receiver.try_iter()
-    }
+    pub fn try_iter(&self) -> crossbeam::TryIter<'_, T> { self.receiver.try_iter() }
 }
 
 impl<T> Clone for Receiver<T>
@@ -80,9 +60,7 @@ impl<T> fmt::Debug for Receiver<T>
 where
     T: MachineImpl,
 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.receiver.fmt(f)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.receiver.fmt(f) }
 }
 
 impl<T> PartialEq for Receiver<T>

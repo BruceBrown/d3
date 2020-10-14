@@ -19,9 +19,7 @@ pub fn configure(
 #[derive(Debug, Default)]
 struct ProducerComponent {}
 impl ProducerComponent {
-    pub fn new() -> Self {
-        Self {}
-    }
+    pub fn new() -> Self { Self {} }
     fn create_instance(&self, conn_id: u128, any_sender: AnySender) {
         if let Ok(session_sender) = Arc::clone(&any_sender).downcast::<Sender<EchoCmd>>() {
             let (_instance, sender) = executor::connect(EchoInstance::new(conn_id));
@@ -42,11 +40,9 @@ impl Machine<ComponentCmd> for ProducerComponent {
 
     fn receive(&self, cmd: ComponentCmd) {
         match cmd {
-            ComponentCmd::NewSession(conn_id, service, any_sender)
-                if service == Service::EchoServer =>
-            {
+            ComponentCmd::NewSession(conn_id, service, any_sender) if service == Service::EchoServer => {
                 self.create_instance(conn_id, any_sender)
-            }
+            },
             ComponentCmd::Start => (),
             ComponentCmd::Stop => (),
             _ => (),
@@ -71,9 +67,7 @@ impl EchoInstance {
             ..Default::default()
         }
     }
-    fn add_sink(&self, sender: EchoCmdSender) {
-        self.mutable.lock().unwrap().senders.push(sender);
-    }
+    fn add_sink(&self, sender: EchoCmdSender) { self.mutable.lock().unwrap().senders.push(sender); }
     fn new_data(&self, conn_id: u128, bytes: &EchoData) {
         self.mutable
             .lock()
@@ -93,10 +87,7 @@ impl Machine<EchoCmd> for EchoInstance {
         match cmd {
             EchoCmd::AddSink(_, sender) => self.add_sink(sender),
             EchoCmd::NewData(conn_id, ref bytes) => self.new_data(conn_id, bytes),
-            _ => log::warn!(
-                "echo producer received an echo cmd it doesn't handle: {:#?}",
-                cmd
-            ),
+            _ => log::warn!("echo producer received an echo cmd it doesn't handle: {:#?}", cmd),
         }
     }
 }

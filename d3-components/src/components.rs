@@ -1,6 +1,5 @@
 #![allow(dead_code)]
-#[allow(unused_imports)]
-use super::*;
+#[allow(unused_imports)] use super::*;
 
 /// ComponentCmd is the instruction set for components. It provides a means of
 /// starting, and stopping a component. Additionally, it signals when a service
@@ -13,11 +12,7 @@ pub enum ComponentCmd {
     Stop,
     // A new session announcement, the sender is where new instances should rendezvous
     // (conn_id, service, sender )
-    NewSession(
-        u128,
-        settings::Service,
-        Arc<dyn std::any::Any + Send + Sync>,
-    ),
+    NewSession(u128, settings::Service, Arc<dyn std::any::Any + Send + Sync>),
 }
 pub type AnySender = Arc<dyn std::any::Any + Send + Sync>;
 pub type ComponentSender = Sender<ComponentCmd>;
@@ -38,15 +33,9 @@ pub struct ComponentInfo {
     sender: ComponentSender,
 }
 impl ComponentInfo {
-    pub fn new(component: settings::Component, sender: ComponentSender) -> Self {
-        Self { component, sender }
-    }
-    pub fn component(&self) -> settings::Component {
-        self.component
-    }
-    pub fn sender(&self) -> &ComponentSender {
-        &self.sender
-    }
+    pub fn new(component: settings::Component, sender: ComponentSender) -> Self { Self { component, sender } }
+    pub fn component(&self) -> settings::Component { self.component }
+    pub fn sender(&self) -> &ComponentSender { &self.sender }
 }
 
 // A utility function that can be use when sending
@@ -63,8 +52,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
-    use super::*;
+    #[allow(unused_imports)] use super::*;
     use simplelog::*;
 
     use crate::settings::Service;
@@ -94,20 +82,10 @@ mod tests {
                     ComponentCmd::NewSession(conn_id, service, sender) => {
                         assert_eq!(conn_id, 12345);
                         assert_eq!(service, Service::EchoServer);
-                        assert_eq!(
-                            false,
-                            Arc::clone(&sender)
-                                .downcast::<Sender<TestMessage>>()
-                                .is_ok()
-                        );
-                        assert_eq!(
-                            true,
-                            Arc::clone(&sender)
-                                .downcast::<Sender<ComponentCmd>>()
-                                .is_ok()
-                        );
+                        assert_eq!(false, Arc::clone(&sender).downcast::<Sender<TestMessage>>().is_ok());
+                        assert_eq!(true, Arc::clone(&sender).downcast::<Sender<ComponentCmd>>().is_ok());
                         self.counter.store(1);
-                    }
+                    },
                     _ => assert_eq!(true, false),
                 }
             }
@@ -132,11 +110,14 @@ mod tests {
         let (m, component_sender) = executor::connect::<_, ComponentCmd>(Controller::default());
         let _test_sender = executor::and_connect::<_, TestMessage>(&m);
 
-        if component_sender.send(ComponentCmd::NewSession(
-            12345,
-            Service::EchoServer,
-            Arc::new(component_sender.clone()),
-        )).is_err(){}
+        if component_sender
+            .send(ComponentCmd::NewSession(
+                12345,
+                Service::EchoServer,
+                Arc::new(component_sender.clone()),
+            ))
+            .is_err()
+        {}
         thread::sleep(std::time::Duration::from_millis(50));
         assert_eq!(m.lock().unwrap().counter.load(), 1);
         executor::stop_server();

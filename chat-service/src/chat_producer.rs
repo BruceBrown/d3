@@ -47,9 +47,7 @@ pub fn configure(
 #[derive(Debug, Default)]
 struct ProducerComponent {}
 impl ProducerComponent {
-    pub fn new() -> Self {
-        Self {}
-    }
+    pub fn new() -> Self { Self {} }
 
     // create a producer for the new connection
     fn create_instance(&self, conn_uuid: u128, any_sender: AnySender) {
@@ -72,11 +70,9 @@ impl Machine<ComponentCmd> for ProducerComponent {
 
     fn receive(&self, cmd: ComponentCmd) {
         match cmd {
-            ComponentCmd::NewSession(conn_uuid, service, any_sender)
-                if service == Service::ChatServer =>
-            {
+            ComponentCmd::NewSession(conn_uuid, service, any_sender) if service == Service::ChatServer => {
                 self.create_instance(conn_uuid, any_sender)
-            }
+            },
             ComponentCmd::Start => (),
             ComponentCmd::Stop => (),
             _ => (),
@@ -116,10 +112,7 @@ impl ChatInstance {
             return;
         }
         self.mutable.lock().unwrap().senders.iter().for_each(|s| {
-            log::debug!(
-                "producer {} sending RemoveSink to coordinator",
-                self.session_id
-            );
+            log::debug!("producer {} sending RemoveSink to coordinator", self.session_id);
             send_cmd(&s, ChatCmd::RemoveSink(conn_uuid));
         });
     }

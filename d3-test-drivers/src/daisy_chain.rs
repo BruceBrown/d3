@@ -1,6 +1,5 @@
-
+use self::forwarder::Forwarder;
 use super::*;
-use self::forwarder::{Forwarder};
 
 /// DaisyChain will setup a linear network of machines in which a messages
 /// received by a machine is forwarded to the next. Every machine in the
@@ -10,19 +9,19 @@ use self::forwarder::{Forwarder};
 /// In this case, a pulse of 400 messages.
 #[derive(Debug, SmartDefault)]
 pub struct DaisyChainDriver {
-    #[default=4000]
+    #[default = 2000]
     pub machine_count: usize,
 
-    #[default=400]
+    #[default = 100]
     pub message_count: usize,
 
-    #[default=true]
+    #[default = true]
     pub bound_queue: bool,
 
-    #[default=1]
+    #[default = 1]
     pub forwarding_multiplier: usize,
 
-    #[default(Duration::from_secs(5))]
+    #[default(Duration::from_secs(10))]
     pub duration: Duration,
 
     #[default(Vec::with_capacity(4010))]
@@ -45,14 +44,16 @@ impl DaisyChainDriver {
         let mut last_sender = s.clone();
         self.senders.push(s);
 
-        for idx in 2..=self.machine_count {
+        for idx in 2 ..= self.machine_count {
             let (_, s) = if self.bound_queue {
                 executor::connect(Forwarder::new(idx))
             } else {
                 executor::connect_unbounded(Forwarder::new(idx))
             };
             last_sender.send(TestMessage::AddSender(s.clone())).unwrap();
-            last_sender.send(TestMessage::ForwardingMultiplier(self.forwarding_multiplier)).unwrap();
+            last_sender
+                .send(TestMessage::ForwardingMultiplier(self.forwarding_multiplier))
+                .unwrap();
             last_sender = s.clone();
             self.senders.push(s);
         }
@@ -71,29 +72,26 @@ impl DaisyChainDriver {
         // wait for the scheduler/executor to get them all assigned
         loop {
             thread::yield_now();
-            if executor::get_machine_count() >= self.baseline + self.machine_count-1 { break }
+            if executor::get_machine_count() >= self.baseline + self.machine_count - 1 {
+                break;
+            }
         }
-        log::info!("completed configuring machines for dasiy-chain test");
     }
     pub fn teardown(daisy_chain: Self) {
         let baseline = daisy_chain.baseline;
         // drop, wiping out all senders/receivers/machines
         drop(daisy_chain);
         // wait for the machines to all go away
-        let mut count: usize = 0;
         loop {
             thread::yield_now();
-            if baseline == executor::get_machine_count() { break }
-            let remain = executor::get_machine_count();
-            if remain != count {
-                log::info!(" {} remain, baseline is {}", remain, baseline);
-                count = remain;
+            if baseline == executor::get_machine_count() {
+                break;
             }
-        }    
+        }
     }
     pub fn run(&self) {
         if let Some(sender) = self.first_sender.as_ref() {
-            for msg_id in 0..self.message_count {
+            for msg_id in 0 .. self.message_count {
                 sender.send(TestMessage::TestData(msg_id)).unwrap();
             }
             if let Some(receiver) = self.receiver.as_ref() {

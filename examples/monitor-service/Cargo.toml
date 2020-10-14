@@ -1,0 +1,13 @@
+[package]
+name = "monitor-service"
+version = "0.1.0"
+authors = ["Bruce Brown <bruce_brown_1207@yahoo.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+log = "0.4"
+d3-core = {version = "0.1.0", path = "../../d3-core"}
+d3-components =  {version = "0.1.0", path = "../../d3-components"}
+d3-dev-instruction-sets = {version = "0.1.0", path = "../../d3-dev-instruction-sets"}

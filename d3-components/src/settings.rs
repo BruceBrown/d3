@@ -16,6 +16,7 @@ use std::env;
 pub struct Settings {
     pub dev_mode: bool,
     pub log_level: String,
+    pub test_server_duration: u64,
     pub executor: Option<Executor>,
     pub features: HashSet<Feature>,
     pub services: HashSet<Service>,
@@ -36,6 +37,8 @@ pub enum Feature {
 pub enum Service {
     EchoServer,
     ChatServer,
+    MonitorService,
+    AliceService,
 }
 
 /// Some tuning params, these might be better as fields
@@ -51,6 +54,8 @@ pub struct Executor {
 pub enum Coordinator {
     EchoCoordinator,
     ChatCoordinator,
+    MonitorCoordinator,
+    AliceCoordinator,
 }
 
 /// All of the coordinator config variants
