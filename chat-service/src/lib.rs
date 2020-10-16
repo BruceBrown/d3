@@ -53,7 +53,7 @@ mod tests {
 
         // install a simple logger
         CombinedLogger::init(vec![TermLogger::new(
-            LevelFilter::Debug,
+            LevelFilter::Error,
             Config::default(),
             TerminalMode::Mixed,
         )])
