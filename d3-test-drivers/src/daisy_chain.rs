@@ -95,7 +95,7 @@ impl DaisyChainDriver {
                 sender.send(TestMessage::TestData(msg_id)).unwrap();
             }
             if let Some(receiver) = self.receiver.as_ref() {
-                wait_for_notification(&receiver, self.exepected_message_count, self.duration);
+                wait_for_notification(receiver, self.exepected_message_count, self.duration);
             }
         }
     }

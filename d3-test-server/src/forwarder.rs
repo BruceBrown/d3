@@ -10,12 +10,10 @@ struct ForwarderSettings {
 
 /// Take the setting from the variant and turn them into a concrete stuct that we can
 /// pass around. Probably could do this with a trait...
-///
 pub fn run(settings: &settings::Settings) {
     log::info!("running forwarder");
     // let things settle down before diving in...
     std::thread::sleep(std::time::Duration::from_millis(750));
-    //
     // pull the forwarder info out of the additoanl hash map
     //
     for a in &settings.additional {
@@ -105,15 +103,14 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
     }
     log::info!("completed daisy-chain run in {:#?}", t.elapsed());
     DaisyChainDriver::teardown(daisy_chain);
-    /* Enable if you want to watch cleanup
+    // Enable if you want to watch cleanup
     // unnecessary, but this gives a graceful cleanup before proceeding...
-    drop(machines);
-    drop(first_sender);
-    drop(last_sender);
-    drop(receiver);
-    drop(instances);
-    std::thread::sleep(std::time::Duration::from_millis(1000));
-    */
+    // drop(machines);
+    // drop(first_sender);
+    // drop(last_sender);
+    // drop(receiver);
+    // drop(instances);
+    // std::thread::sleep(std::time::Duration::from_millis(1000));
 }
 
 fn run_fanout_fanin(settings: &ForwarderSettings) {

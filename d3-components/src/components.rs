@@ -6,48 +6,93 @@
 /// has a new session along with the sender for the coordinator of the session.
 #[derive(Debug, MachineImpl)]
 pub enum ComponentCmd {
-    // Starts a component, some components don't need to be told to start, others do
+    /// Starts a component, some components don't need to be told to start, others do.
+    /// Start is sent soon after the server is started and is automatic. It notifies
+    /// the component that it can complete any deferred setup and should be in a
+    /// running state.
     Start,
-    // Stops a component
+    /// Stops a component. Stop is sent as the server is shutting down and
+    /// is automatic.It notifies the component that the server is about to stop
+    /// and that the component should cleanup anything it needs to cleanup before
+    /// the server stops.
     Stop,
-    // A new session announcement, the sender is where new instances should rendezvous
-    // (conn_id, service, sender )
+    /// NewSession announces that there's a new session which other components
+    /// may want to know about. The tupple is a session Uuid, a service type,
+    /// and an anonymous sender. Presumably, the component responding to this
+    /// is able to convert the sender to a sender which it can interact with.
     NewSession(u128, settings::Service, Arc<dyn std::any::Any + Send + Sync>),
 }
+
+/// Shorthand for an anonymous sender, that can be sent instructions from a specific
+/// instruction set. The following example illustrates how to convert an AnySender
+/// to a ComponentSender.
+/// # Examples
+///
+/// ```
+/// # use std::error::Error;
+/// # use std::sync::Arc;
+/// # use crossbeam;
+/// # use crossbeam::{Sender,Receiver};
+/// # type AnySender = Arc<dyn std::any::Any + Send + Sync>;
+/// # enum ComponentCmd { Start, Stop }
+/// # type ComponentSender = Sender<ComponentCmd>;
+/// # enum StateTable { Start, Stop }
+/// # fn channel<T>() -> (crossbeam::Sender<T>, crossbeam::Receiver<T>) {
+/// #   crossbeam::unbounded()
+/// # }
+/// # fn main() -> Result<(), Box<dyn Error>> {
+/// #
+/// /// Consume `sender` returning either `Some(sender: ComponentSender)` or 'None'.
+/// fn as_component_sender(any_sender: AnySender) -> Option<ComponentSender>
+/// {
+///     if let Ok(sender) = any_sender.downcast::<ComponentSender>() {
+///         // pull out the sender and clone it, as its not copyable
+///         Some((*sender).clone())
+///     } else {
+///         None
+///     }
+/// }
+/// let (sender, receiver) = channel::<ComponentCmd>();
+/// let any_sender: AnySender = Arc::new(sender);
+/// assert_eq!(as_component_sender(any_sender).is_some(), true);
+///
+/// let (sender, receiver) = channel::<StateTable>();
+/// let any_sender: AnySender = Arc::new(sender);
+/// assert_eq!(as_component_sender(any_sender).is_some(), false);
+///
+/// # Ok(())
+/// }
+/// ```
 pub type AnySender = Arc<dyn std::any::Any + Send + Sync>;
+/// Shorthand for a sender, that can be sent ComponentCmd instructions.
 pub type ComponentSender = Sender<ComponentCmd>;
 
 /// ComponentError describes the types of errors that a component may return.
 /// This is most used during configuration.
 #[derive(Debug)]
 pub enum ComponentError {
+    /// Indicates that a component was unable to fully activate itself.
     NotEnabled(String),
+    /// Indicates that the component was unable to obtain
+    /// enough configuration information to fully activate itself.
     BadConfig(String),
 }
 
 /// ComponentInfo describes an active component. It provides the component type
-/// and the sender for the component.
+/// and the sender for the component. It is assembled during the config startup phase
+/// and sent to each coordinator.
 #[derive(Debug, Clone)]
 pub struct ComponentInfo {
     component: settings::Component,
     sender: ComponentSender,
 }
 impl ComponentInfo {
-    pub fn new(component: settings::Component, sender: ComponentSender) -> Self { Self { component, sender } }
-    pub fn component(&self) -> settings::Component { self.component }
-    pub fn sender(&self) -> &ComponentSender { &self.sender }
-}
-
-// A utility function that can be use when sending
-#[inline]
-pub fn send_cmd<T>(sender: &Sender<T>, cmd: T)
-where
-    T: MachineImpl + MachineImpl<InstructionSet = T> + std::fmt::Debug,
-{
-    match sender.send(cmd) {
-        Ok(_) => (),
-        Err(e) => log::info!("failed to send instruction: {}", e), /* should do some logging */
-    }
+    /// Creates and new ComponentInfo struct and returns it.
+    pub const fn new(component: settings::Component, sender: ComponentSender) -> Self { Self { component, sender } }
+    /// Get the component type for this component
+    pub const fn component(&self) -> settings::Component { self.component }
+    /// Get a reference to the sender for this component
+    pub const fn sender(&self) -> &ComponentSender { &self.sender }
 }
 
 #[cfg(test)]

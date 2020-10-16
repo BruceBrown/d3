@@ -1,4 +1,3 @@
-
 #[allow(unused_imports)] use super::*;
 
 use std::boxed::Box;
@@ -13,8 +12,6 @@ use crossbeam::TryRecvError;
 use ringbuf::RingBuffer;
 use slab::Slab;
 
-
-//
 // Here's how this all works... There's a single thread responsible the network. Essentially,
 // there's a loop in which does the following:
 //
@@ -290,7 +287,7 @@ impl NetworkThread {
             self.waker_thread = Some(thread);
         }
         while self.is_running {
-            //poll is a bit messy, it doesn't wake on event
+            // poll is a bit messy, it doesn't wake on event
             self.poll.poll(&mut events, Some(POLL_INTERVAL)).unwrap();
             for event in events.iter() {
                 match event.token() {
@@ -325,7 +322,7 @@ impl NetworkThread {
             // we've processed all of the events, now for the channel
             let _result = loop {
                 let cmd = self.receiver.try_recv();
-                //if let Ok(cmd) = &cmd { log::trace!("mio {:#?}", cmd) }
+                // if let Ok(cmd) = &cmd { log::trace!("mio {:#?}", cmd) }
                 let result = match cmd {
                     Ok(NetCmd::Stop) => {
                         self.is_running = false;

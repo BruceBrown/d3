@@ -4,21 +4,27 @@ use crossbeam::deque;
 
 const WORKER_MESSAGE_QUEUE_COUNT: usize = 10;
 
-/// The timeslice given to receive_cmd, allowing it to recv multiple commands
+/// The static TIMESLICE_IN_MILLIS is the timeslice that a machine is allowed to use before
+/// being returned to the scheduler. While processing the message queue, if the machine
+/// has not exhausted its timeslice, it will receive additional instructions from the
+/// Receiver before being returned t the scheduler. The current value is 20ms
 static TIMESLICE_IN_MILLIS: AtomicCell<usize> = AtomicCell::new(20);
-
+/// The get_time_slice function returns the current timeslice value.
 pub fn get_time_slice() -> std::time::Duration { std::time::Duration::from_millis(TIMESLICE_IN_MILLIS.load() as u64) }
+/// The set_time_slice function sets the current timeslice value. This should be
+/// performed before starting the server.
 pub fn set_time_slice(new: std::time::Duration) { TIMESLICE_IN_MILLIS.store(new.as_millis() as usize) }
 
+/// The RUN_QUEUE_LEN static is the current length of the run queue, it is considered read-only..
 pub static RUN_QUEUE_LEN: AtomicUsize = AtomicUsize::new(0);
+/// The EXECUTORS_SNOOZING static is the current number of executors that are idle, it is considered read-only.
 pub static EXECUTORS_SNOOZING: AtomicUsize = AtomicUsize::new(0);
 
-///
-/// Unlike most of the system, which uses u128 ids, the executor uses usize. If atomic u128 were
-/// available, it would likely use u128 as well. The decision to use atomic is based upon this
-/// being the place where threads are used, including outside threads, such as the system monitor.
+// Unlike most of the system, which uses u128 ids, the executor uses usize. If atomic u128 were
+// available, it would likely use u128 as well. The decision to use atomic is based upon this
+// being the place where threads are used, including outside threads, such as the system monitor.
 
-/// The factory for the executor
+// The factory for the executor
 pub struct SystemExecutorFactory {
     workers: RefCell<usize>,
     run_queue: TaskInjector,
@@ -36,7 +42,7 @@ impl SystemExecutorFactory {
     }
 }
 
-/// impl the factory
+// impl the factory
 impl ExecutorFactory for SystemExecutorFactory {
     // change the number of executors
     fn with_workers(&self, workers: usize) { self.workers.replace(workers); }
@@ -52,7 +58,7 @@ impl ExecutorFactory for SystemExecutorFactory {
     }
 }
 
-/// Find a machine to receive a message.
+// Find a machine to receive a message.
 fn find_task<T>(
     local: &deque::Worker<T>,
     global: &deque::Injector<T>,
@@ -75,7 +81,7 @@ fn find_task<T>(
     })
 }
 
-/// The notifier
+// The notifier
 struct Notifier {
     monitor: MonitorSender,
     scheduler: SchedSender,
@@ -88,13 +94,12 @@ impl ExecutorNotifier for Notifier {
     fn notify_can_schedule(&self, machine_key: usize) { self.wait_queue.push(SchedTask::new(machine_key)); }
 }
 
-///
-/// This is the model I've adopted for managing worker threads. The thread
-/// data needs to be built in a way that it can be moved as a self -- it just
-/// makes things easier.
-///
-/// There's an assocative struct, which is pretty thin and just caries the
-/// join handler and sender to control the thread.
+// This is the model I've adopted for managing worker threads. The thread
+// data needs to be built in a way that it can be moved as a self -- it just
+// makes things easier.
+//
+// There's an assocative struct, which is pretty thin and just caries the
+// join handler and sender to control the thread.
 #[allow(dead_code)]
 struct ThreadData {
     id: Id,
@@ -161,11 +166,11 @@ impl ThreadData {
                 // and after all that, we've got nothing left to do. Let's catch some zzzz's
                 if blocked_sender_count == 0 && !ran_task {
                     if backoff.is_completed() {
-                        //log::debug!("executor {} is sleeping", self.id);
+                        // log::debug!("executor {} is sleeping", self.id);
                         EXECUTORS_SNOOZING.fetch_add(1, Ordering::SeqCst);
                         thread::park_timeout(Duration::from_secs(300));
                         EXECUTORS_SNOOZING.fetch_sub(1, Ordering::SeqCst);
-                    //log::debug!("executor {} is awake", self.id);
+                    // log::debug!("executor {} is awake", self.id);
                     } else {
                         backoff.snooze();
                     }
@@ -336,7 +341,7 @@ impl ThreadData {
     }
 }
 
-/// The worker associated with the executor
+// The worker associated with the executor
 struct Worker {
     id: Id,
     sender: SchedSender,
@@ -502,11 +507,9 @@ impl Executor {
         } else {
             log::warn!("joinable executor {} isn't on any list", id);
         }
-        /*
-        if self.workers.read().unwrap().len() < self.worker_count {
-            self.add_executor();
-        }
-        */
+        // if self.workers.read().unwrap().len() < self.worker_count {
+        // self.add_executor();
+        // }
     }
 
     // dynamically add an executor
@@ -567,7 +570,7 @@ impl Executor {
     }
 }
 
-/// impl the trait object for controlling the executor
+// impl the trait object for controlling the executor
 impl ExecutorControl for Executor {
     /// Notification that an executor has been parked
     fn parked_executor(&self, id: usize) { self.parked_executor(id); }

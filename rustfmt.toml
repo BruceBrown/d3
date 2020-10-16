@@ -1,5 +1,8 @@
 edition = "2018"
 max_width = 120
+comment_width = 100
+normalize_comments = true
+normalize_doc_attributes = true
 fn_single_line = true
 inline_attribute_width = 100
 match_block_trailing_comma = true

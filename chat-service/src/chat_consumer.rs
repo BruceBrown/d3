@@ -24,7 +24,6 @@
 //!
 //! While this could have been written simpler, using a single component, it is an objective to illustrate
 //! how components interact and are wired together.
-//!
 use super::*;
 
 use std::collections::HashMap;
@@ -49,7 +48,7 @@ pub fn configure(
 struct ConsumerComponent {}
 
 impl ConsumerComponent {
-    pub fn new() -> Self { Self {} }
+    pub const fn new() -> Self { Self {} }
 
     // create a consumer for the new session
     fn create_instance(&self, conn_uuid: u128, any_sender: AnySender) {
@@ -136,7 +135,7 @@ impl ChatInstance {
     fn new_data(&self, conn_uuid: u128, bytes: &Data) {
         self.mutable.lock().unwrap().senders.iter().for_each(|s| {
             log::debug!("consumer {} sending to {}", self.session_id, s.0);
-            send_cmd(&s.1, ChatCmd::NewData(conn_uuid, Arc::clone(bytes)));
+            send_cmd(s.1, ChatCmd::NewData(conn_uuid, Arc::clone(bytes)));
         });
     }
 }

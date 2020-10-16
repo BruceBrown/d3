@@ -1,28 +1,43 @@
-//!
 //! This is the Alice Service. In testing, I've used Alice quite a bit. She's now going to be made
 //! available to a nearby browser.
 //!
-//! The Alice Service illustrates a coordinator receiving connection announcments. In response, it
-//! creates a machine and notifies the network to bind the new connection to the newly created machine.
-//!
-//! That machine implement a trivial http server connection. It handles receiving network bytes, sending
+//! The Alice Service illustrates a coordinator receiving connection announcments. In response,
+//! a machine is created. The network is then asked to bind the connection to the created machine. That
+//! machine implements a trivial http server connection. It handles receiving network bytes, sending
 //! network bytes, receiving a notification that the connection is dead, and telling the network to
 //! disconnect the client.
 //!
-//! We don't keep track of the number of connection, so this is a great vector for overloading our
-//! server. This is just safe enough to get a server up and running.
+//! ## Caveats
+//! * The number of connections isn't tracked, so this is a great vector for overloading the server.
+//! * This is just safe enough to get a server up and running and illustrate the serice.
 
 use super::*;
 
-// Ok, so now we need to implement the alice coordinator, aka browser-listener.
+// The AliceCoordinator receives notification of new connections and in response
+// spawns a Alice machine to handle the connection.
 #[derive(Debug)]
 struct AliceCoordinator {
+    // A net_sender is injected, simplifying communincation with the network.
     net_sender: NetSender,
+    // The bind_addr is also injected 
     bind_addr: String,
 }
 
-// Alice's coordinator is a machine that speak several languages, first is NetCmd.
-// When a new connection is announced, AliceCoordinator will spawn a machine to handle it.
+// The implementation of the AliceCoordinator only needs to handle a new connection
+impl AliceCoordinator {
+    // When a new connection arives, create Alice and let her handle the traffic
+    fn add_connection(&self, conn_id: NetConnId) {
+        // create Alice and let her handle connection traffic
+        let (_, sender) = executor::connect::<_, NetCmd>(Alice::new(conn_id, self.net_sender.clone()));
+        // give Alice's sender to the network binding her to the connection
+        self.net_sender
+            .send(NetCmd::BindConn(conn_id, sender))
+            .expect("failed to send BindConn");
+    }
+}
+
+// The AliceCoordinator implements the NetCmd instruction set. The connector only needs to
+// handle the NewConn instruction.
 impl Machine<NetCmd> for AliceCoordinator {
     fn receive(&self, cmd: NetCmd) {
         // normally, you'd do some matching, but since its just 1 case, a let works better
@@ -38,26 +53,13 @@ impl Machine<NetCmd> for AliceCoordinator {
     }
 }
 
-// Next, the coordinator must implement the ComponentCmd. This is required by the configuration,
-// which must return a ComponentSender if the service is to be enabled. In our case, there's
-// nothing to implement.
+// The AliceCoordinator, as a coordinator, must implement the ComponentCmd instruction set.
+// However, in this case, there's really nothing to do.
 impl Machine<ComponentCmd> for AliceCoordinator {
     fn receive(&self, _cmd: ComponentCmd) {}
 }
 
-// Finally, we have the implementation for the coordinator.
-impl AliceCoordinator {
-    fn add_connection(&self, conn_id: NetConnId) {
-        // we're going to spin up an Alice and let her handle connection traffic
-        let (_, sender) = executor::connect::<_, NetCmd>(Alice::new(conn_id, self.net_sender.clone()));
-        // give Alice's sender to the network binding her to the connection
-        self.net_sender
-            .send(NetCmd::BindConn(conn_id, sender))
-            .expect("failed to send BindConn");
-    }
-}
-
-// Alice can be in one of several states
+// The AliceState enumerates the states for Alice
 #[derive(Debug, Copy, Clone, Eq, PartialEq, SmartDefault)]
 enum AliceState {
     #[default]
@@ -68,7 +70,7 @@ enum AliceState {
     Bye,
 }
 
-// Here's Alice. She's always in a state.
+// The Alice structure is created each time there is a new connection.
 #[derive(Debug)]
 struct Alice {
     uuid: AtomicCell<Uuid>,
@@ -78,8 +80,7 @@ struct Alice {
     logtag: String,
 }
 
-// Alice has several network commands to handle, well, really only one.
-// Everything, except for RecvBytes, can be removed without impact to Alice.
+// Alice implements the NetCmd instruction set.
 impl Machine<NetCmd> for Alice {
     // connected doesn't require an impl, we'll just save the uuid and log
     fn connected(&self, uuid: Uuid) {
@@ -105,6 +106,7 @@ impl Machine<NetCmd> for Alice {
 
 // Most of Alice's implementation is dealing with http and html.
 impl Alice {
+    // create Alice
     fn new(conn_id: NetConnId, net_sender: NetSender) -> Self {
         Self {
             uuid: AtomicCell::new(Uuid::default()),
@@ -114,6 +116,7 @@ impl Alice {
             logtag: format!("Alice({})", conn_id),
         }
     }
+
     fn is_started(&self) -> bool { self.state.load() == AliceState::Start }
     fn is_stopped(&self) -> bool { self.state.load() == AliceState::Stop }
     fn is_send_form(&self) -> bool { self.state.load() == AliceState::SendForm }
@@ -238,9 +241,7 @@ impl Alice {
     }
 }
 
-// The hardest part of this is the configuration parsing. After repeating nearly the same code
-// several times, I'm condistering a macro, or at least an encapsulation.
-// the worst is over...
+// The ugliest part of a coordinator is the configuration parsing.
 pub fn configure(
     settings: &Settings,
     _components: &[ComponentInfo],
@@ -268,10 +269,13 @@ pub fn configure(
                     continue;
                 }
                 log::debug!("alice service selected configuration: {:#?}", value);
+                // create the AliceCoordinator machine with a NetCmd communication channel
                 let (m, sender) = executor::connect::<_, NetCmd>(coordinator);
+                // bind the server address to the coordinator
                 get_network_sender()
                     .send(NetCmd::BindListener(m.lock().unwrap().bind_addr.clone(), sender))
                     .expect("BindListener failed");
+                // add a ComponentCmd communication channel to the coordinator
                 let sender = executor::and_connect::<_, ComponentCmd>(&m);
                 return Ok(Some(sender));
             }
@@ -283,7 +287,7 @@ pub fn configure(
     ))
 }
 
-//Our simple form, in two parts. Usually, they are assembled with some text between them.
+// Our simple form, in two parts. Usually, they are assembled with some text between them.
 const FORM_PART_1: &str = "<!DOCTYPE html>\n\
 <html>\n\
 <body>\n\

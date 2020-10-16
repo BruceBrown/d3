@@ -2,7 +2,6 @@ use self::connection::*;
 use super::*;
 use crossbeam::{RecvError, RecvTimeoutError, TryRecvError};
 
-///
 /// The Receiver is a wrapper aruond the Crossbeam receiver. It
 /// intentionally limits the surface of the receiver. Much of this
 /// is just boilerplate wrapping

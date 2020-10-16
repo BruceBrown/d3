@@ -42,7 +42,6 @@
 //!
 //! While this could have been written simpler, using a single component, it is an objective to illustrate
 //! how components interact and are wired together.
-//!
 use super::*;
 use components::{ComponentError, ComponentInfo, ComponentSender};
 use network::{get_network_sender, NetCmd, NetConnId, NetSender};
@@ -50,7 +49,6 @@ use settings::{Coordinator, CoordinatorVariant, Settings};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
-///
 /// Not quite as simple as the echo server, which has a pathway of Coordinate -> Consumer -> Producer -> Coordinator
 ///
 /// Normally, we'd add a new component to manage routing with multiple chat rooms. However, we're going to cheap
@@ -155,7 +153,7 @@ impl MutableCoordinatorData {
         let sender = self.inst_chat_sender.as_ref().unwrap().clone();
         components.iter().for_each(|c| {
             send_cmd(
-                &c.sender(),
+                c.sender(),
                 ComponentCmd::NewSession(conn_uuid, Service::ChatServer, Arc::new(sender.clone())),
             )
         });
@@ -203,7 +201,7 @@ impl Machine<NetCmd> for ChatCoordinator {
         log::warn!("chat coordinator component disconnected");
     }
     fn receive(&self, cmd: NetCmd) {
-        //log::trace!("echo instance {:#?}", &cmd);
+        // log::trace!("echo instance {:#?}", &cmd);
         // for a single match, this is cleaner
         if let NetCmd::NewConn(conn_id, _bind_addr, _remote_addr, buf_size) = cmd {
             self.create_instance(conn_id, buf_size);
@@ -211,7 +209,6 @@ impl Machine<NetCmd> for ChatCoordinator {
     }
 }
 
-//
 // We have the echo instance, which interfaces with the network.
 // We're going to hear back from 2 instances, one is consumer souce/sink
 // the other is a producer source/sink. The echo instance is going to wire
@@ -324,7 +321,7 @@ impl ChatInstance {
         let conn_id: usize = conn_uuid.try_into().unwrap();
         let mut mutable = self.mutable.lock().unwrap();
         for v in mutable.consumers.values() {
-            send_cmd(&v, ChatCmd::AddSink(conn_uuid, sender.clone()));
+            send_cmd(v, ChatCmd::AddSink(conn_uuid, sender.clone()));
         }
         send_cmd(
             &sender,
@@ -351,7 +348,7 @@ impl ChatInstance {
                 let mut msg = name.clone();
                 msg.extend(bytes);
                 let msg = Arc::new(msg);
-                send_cmd(&sender, ChatCmd::NewData(conn_uuid, msg));
+                send_cmd(sender, ChatCmd::NewData(conn_uuid, msg));
             }
         } else {
             // attempt to trim right side whitespace
@@ -388,7 +385,7 @@ impl Machine<ChatCmd> for ChatInstance {
         log::info!("chat server coordinator disconnected");
     }
     fn receive(&self, cmd: ChatCmd) {
-        //log::trace!("echo instance {:#?}", &cmd);
+        // log::trace!("echo instance {:#?}", &cmd);
         match cmd {
             ChatCmd::Instance(conn_id, sender, settings::Component::ChatConsumer) => self.add_consumer(conn_id, sender),
             ChatCmd::RemoveSink(conn_id) => self.remove_sink(conn_id),
@@ -404,7 +401,7 @@ impl Machine<NetCmd> for ChatInstance {
         log::info!("chat coordinator (NetCmd) disconnected");
     }
     fn receive(&self, cmd: NetCmd) {
-        //log::trace!("echo instance {:#?}", &cmd);
+        // log::trace!("echo instance {:#?}", &cmd);
         match cmd {
             NetCmd::CloseConn(conn_id) => self.close(conn_id),
             NetCmd::RecvBytes(conn_id, bytes) => self.received_bytes(conn_id, bytes),

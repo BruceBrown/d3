@@ -9,42 +9,58 @@ type SelIndexMap = FnvIndexMap<usize, usize>;
 type TimeStampedSelIndexMap = FnvIndexMap<usize, (Instant, usize)>;
 type MachineMap = slab::Slab<ShareableMachine>;
 
-/// The scheduler is responsible for the life-cycle of a machine.
-///
-/// It starts with a machine being built and it being assigned.
-/// When it receives messages, the machine is given to the executor
-/// as a task. It then returns back to the scheduler to await
-/// further instructions, or destroeyed if its channel has closed.
-///
-/// Some thing of note:
-/// * Crossbeam Select signals receiver readiness
-/// * Crossbeam Deque is the task queue
-/// * IndexMap is used for translating select index into machine key
-/// * Fnv is the hasher used for IndexMap
-/// * Slab is used as a container of machines.
-///
+// The scheduler is responsible for the life-cycle of a machine.
+//
+// It starts with a machine being built and it being assigned.
+// When it receives messages, the machine is given to the executor
+// as a task. It then returns back to the scheduler to await
+// further instructions, or destroeyed if its channel has closed.
+//
+// Some thing of note:
+// * Crossbeam Select signals receiver readiness
+// * Crossbeam Deque is the task queue
+// * IndexMap is used for translating select index into machine key
+// * Fnv is the hasher used for IndexMap
+// * Slab is used as a container of machines.
+//
 
-/// Tuning for the scheduler, the count if for slab and map index sizing.
+// Tuning for the scheduler, the count if for slab and map index sizing.
 #[allow(dead_code)]
 #[allow(non_upper_case_globals)]
+/// The machine_count_estimate is an estimate for the number of machines
+/// that will exist at any point in time. A Slab is used for tracking
+/// machines and mis-estimating will cause reallocation and data movement.
+/// The default is 5000 machines.
 pub static machine_count_estimate: AtomicCell<usize> = AtomicCell::new(5000);
+
+/// The get_machine_count_estimate function returns the current estimate.
 #[allow(dead_code)]
 pub fn get_machine_count_estimate() -> usize { machine_count_estimate.load() }
+
+/// The set_machine_count_estimate function sets the current estimate. The
+/// estimate should be set before starting the server.
 #[allow(dead_code)]
 pub fn set_machine_count_estimate(new: usize) { machine_count_estimate.store(new); }
 
-#[allow(dead_code)]
-#[allow(non_upper_case_globals)]
+/// The selector_maintenance_duration determines how often the selector will yield
+/// for maintanance. It will also yeild when it has accumulated enough debt to warrant yielding.
+#[allow(dead_code, non_upper_case_globals)]
 pub static selector_maintenance_duration: AtomicCell<Duration> = AtomicCell::new(Duration::from_millis(500));
-#[allow(dead_code)]
+
+/// The get_selector_maintenance_duration function returns the current maintenance duration.
+#[allow(dead_code, non_upper_case_globals)]
 pub fn get_selector_maintenance_duration() -> Duration { selector_maintenance_duration.load() }
-#[allow(dead_code)]
+
+/// The get_selector_maintenance_duration function returns the current maintenance duration.
+#[allow(dead_code, non_upper_case_globals)]
 pub fn set_selector_maintenance_duration(new: Duration) { selector_maintenance_duration.store(new); }
 
-#[allow(dead_code)]
-#[allow(non_upper_case_globals)]
+/// The live_machine_count is the number of machines in the collective.
+#[allow(dead_code, non_upper_case_globals)]
 pub static live_machine_count: AtomicUsize = AtomicUsize::new(0);
-#[allow(dead_code)]
+
+/// The get_machine_count function returns the number of machines in the collective.
+#[allow(dead_code, non_upper_case_globals)]
 pub fn get_machine_count() -> usize { live_machine_count.load(Ordering::SeqCst) }
 
 /// Statistics for the schdeduler
@@ -64,7 +80,7 @@ pub struct SchedStats {
     pub fast_select_count: u64,
 }
 
-/// The default scheduler. It is created by the scheduler factory.
+// The default scheduler. It is created by the scheduler factory.
 #[allow(dead_code)]
 pub struct DefaultScheduler {
     sender: SchedSender,
@@ -72,12 +88,12 @@ pub struct DefaultScheduler {
     thread: Option<thread::JoinHandle<()>>,
 }
 impl DefaultScheduler {
-    /// stop the scheduler
+    // stop the scheduler
     fn stop(&self) {
         log::info!("stopping scheduler");
         self.sender.send(SchedCmd::Stop).unwrap();
     }
-    /// create the scheduler
+    // create the scheduler
     pub fn new(
         sender: SchedSender,
         receiver: SchedReceiver,
@@ -96,13 +112,13 @@ impl DefaultScheduler {
 }
 
 impl Scheduler for DefaultScheduler {
-    /// assign a new machine into the collective
+    // assign a new machine into the collective
     fn assign_machine(&self, machine: MachineAdapter) { self.sender.send(SchedCmd::New(machine)).unwrap(); }
-    /// stop the scheduler
+    // stop the scheduler
     fn stop(&self) { self.stop(); }
 }
 
-/// If we haven't done so already, attempt to stop the schduler thread
+// If we haven't done so already, attempt to stop the schduler thread
 impl Drop for DefaultScheduler {
     fn drop(&mut self) {
         if let Some(thread) = self.thread.take() {
@@ -116,16 +132,16 @@ impl Drop for DefaultScheduler {
     }
 }
 
-/// The schduler thread. Working through the borrow-checker made
-/// this an interesting design. At the top we have maintenance
-/// of the collective, where machines are inserted or removed.
-/// From there a select list is created for every machine ready
-/// to receive a command. That layer is is responsible for deciding
-/// which commands it can immediately handle and which need to
-/// be handled by the outer layer. Then we come to the final
-/// layer of the scheduler. Where it mantians a seconday select
-/// list for machines returing from the executor.
-///
+// The schduler thread. Working through the borrow-checker made
+// this an interesting design. At the top we have maintenance
+// of the collective, where machines are inserted or removed.
+// From there a select list is created for every machine ready
+// to receive a command. That layer is is responsible for deciding
+// which commands it can immediately handle and which need to
+// be handled by the outer layer. Then we come to the final
+// layer of the scheduler. Where it mantians a seconday select
+// list for machines returing from the executor.
+//
 const MAX_SELECT_HANDLES: usize = usize::MAX - 16;
 
 #[allow(dead_code)]
@@ -139,7 +155,7 @@ struct SchedulerThread {
     machines: MachineMap,
 }
 impl SchedulerThread {
-    /// start the scheduler thread and call run()
+    // start the scheduler thread and call run()
     fn spawn(
         receiver: SchedReceiver,
         monitor: MonitorSender,
@@ -359,7 +375,7 @@ impl SchedulerThread {
         if in_flight > 0 {
             let asleep = self::executor::EXECUTORS_SNOOZING.load(Ordering::SeqCst);
             if asleep > 0 {
-                //log::debug!("in flight {}, waking {}", in_flight, asleep);
+                // log::debug!("in flight {}, waking {}", in_flight, asleep);
                 Server::wake_executor_threads();
             }
         }
@@ -489,6 +505,8 @@ impl SchedResults {
     }
 
     // unwrap the object, returning the accumulated results
+    // clippy misunderstands and belives this can be a const fn
+    #[allow(clippy::missing_const_for_fn)]
     fn unwrap(self) -> Vec<Result<SchedCmd, RecvError>> { self.results }
 }
 
@@ -533,6 +551,7 @@ mod tests {
         fn receive(&self, _message: TestMessage) {}
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn build_machine<T, P>(
         machine: T,
     ) -> (
@@ -548,8 +567,8 @@ mod tests {
         let channel_max = get_default_channel_capacity();
         let (machine, sender, collective_adapter) =
             <<P as MachineImpl>::Adapter as MachineBuilder>::build_raw(machine, channel_max);
-        //let collective_adapter = Arc::new(Mutex::new(collective_adapter));
-        //Server::assign_machine(collective_adapter);
+        // let collective_adapter = Arc::new(Mutex::new(collective_adapter));
+        // Server::assign_machine(collective_adapter);
         (machine, sender, collective_adapter)
     }
 

@@ -1,9 +1,7 @@
-///
 /// This is just a brain-dead simple event timer. Mostly, its used for
 /// determining when to report statistics. It defaults to once every
 /// 5 minutes. It is designed to account for drift and long sleeps
 /// where one or more expirations may be missed.
-///
 use std::time::{Duration, Instant};
 
 #[derive(Debug, SmartDefault, Copy, Clone)]
@@ -23,7 +21,7 @@ impl SimpleEventTimer {
         }
         Self {
             duration,
-            ..SimpleEventTimer::default()
+            ..Self::default()
         }
     }
     pub fn check(&mut self) -> bool {

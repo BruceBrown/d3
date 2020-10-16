@@ -4,11 +4,8 @@ use crate::machine_impl::*;
 use crossbeam::deque;
 use d3_derive::*;
 
-///
 /// These are traits that are used for major components
-///
 
-///
 /// Messages which can be sent to the system monitor
 #[allow(dead_code)]
 #[derive(Debug, Clone)]

@@ -1,7 +1,6 @@
 use self::{connection::*, receiver::*, sender::*};
 use super::*;
 
-///
 /// This is a small wrapper around the crossbeam channel. There are a
 /// few reasons for this. We may want to use adifferent channel
 /// implementation in the future, so we want to encapsulate it.
@@ -9,7 +8,6 @@ use super::*;
 /// otherwise we block a thread, forcing the spawning of a thread.
 /// We want to enforce that the channels are limited to using
 /// only types that derive from MachineImpl.
-///
 
 /// The channel id can be used in logging, otherwise its useless
 static CHANNEL_ID: AtomicUsize = AtomicUsize::new(1);

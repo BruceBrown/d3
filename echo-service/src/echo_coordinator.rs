@@ -69,7 +69,7 @@ impl EchoCoordinator {
         // the the other components that there's a new echo session nad how to contact the coordinator
         self.components.iter().for_each(|c| {
             send_cmd(
-                &c.sender(),
+                c.sender(),
                 ComponentCmd::NewSession(conn_uuid, Service::EchoServer, Arc::new(sender.clone())),
             )
         });
@@ -100,7 +100,7 @@ impl Machine<NetCmd> for EchoCoordinator {
         log::warn!("echo router component disconnected");
     }
     fn receive(&self, cmd: NetCmd) {
-        //log::trace!("echo instance {:#?}", &cmd);
+        // log::trace!("echo instance {:#?}", &cmd);
         // for a single match, this is cleaner
         if let NetCmd::NewConn(conn_id, _bind_addr, _remote_addr, buf_size) = cmd {
             self.create_instance(conn_id, buf_size);
@@ -108,7 +108,6 @@ impl Machine<NetCmd> for EchoCoordinator {
     }
 }
 
-//
 // We have the echo instance, which interfaces with the network.
 // We're going to hear back from 2 instances, one is consumer souce/sink
 // the other is a producer source/sink. The echo instance is going to wire
@@ -206,7 +205,7 @@ impl Machine<EchoCmd> for EchoInstance {
         log::info!("echo router (EchoCmd) disconnected");
     }
     fn receive(&self, cmd: EchoCmd) {
-        //log::trace!("echo instance {:#?}", &cmd);
+        // log::trace!("echo instance {:#?}", &cmd);
         match cmd {
             EchoCmd::Instance(_conn_id, sender, settings::Component::EchoConsumer) => self.add_consumer(sender),
             EchoCmd::Instance(_conn_id, sender, settings::Component::EchoProducer) => self.add_producer(sender),
@@ -221,7 +220,7 @@ impl Machine<NetCmd> for EchoInstance {
         log::info!("echo router (NetCmd) disconnected");
     }
     fn receive(&self, cmd: NetCmd) {
-        //log::trace!("echo instance {:#?}", &cmd);
+        // log::trace!("echo instance {:#?}", &cmd);
         match cmd {
             NetCmd::CloseConn(conn_id) => self.close(conn_id),
             NetCmd::RecvBytes(conn_id, bytes) => self.received_bytes(conn_id, bytes),
@@ -233,7 +232,7 @@ impl Machine<NetCmd> for EchoInstance {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+
     #[test]
     fn test() {}
 }

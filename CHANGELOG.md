@@ -1,6 +1,9 @@
 # d3 -- Revision ChangeLog
 **There hasn't been a release, stay tuned.**
 
+## Docs, Inline Examples, Clippy and Fmt
+Quite a few changes however, its mostly formatting, adding and cleaning up documentation. The actual implementation is ony slightly changed.
+
 ## Finally, executor threads can now idle
 Previously, the executor threads would yield when a cycle performed no work. Now, it will use a backoff to yeild and when the backoff has determined that its completed, the thread will park. This requires that the scheduler wake it when it schedules work. The downside of this is that the schdeuler needs to know if there are executors sleeping, which becomes an atomic shared between executors and the scheduler.
 

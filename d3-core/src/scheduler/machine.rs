@@ -4,19 +4,8 @@ use super::*;
 use self::setup_teardown::*;
 use crate::channel::sender::*;
 
-///
-/// connect, as the name implies, connects a machine into the system. Toss
-/// in an object, implementing a Machine for an instruction set and get
-/// back that machine, safely wrapped, along with a sender that you're
-/// free to clone and hand out to other objects. There are 3 alternatives:
-///     1. Create with a, default, fixed size queue.
-///     2. Create with a fixed size queue, specified by the caller of connect.
-///     3. Create with an unbound queue size.
-///
-
-///
-/// connect creates a machine with a queue bound to a defauls size. When full,
-/// the sender will block. However, it will not block the executor.
+/// The connect method creates a machine, implementing an instruction set.
+/// The machine has a bound communication channel of a default size receiving those instructions.
 pub fn connect<T, P>(
     machine: T,
 ) -> (
@@ -35,7 +24,8 @@ where
     (machine, sender)
 }
 
-/// and_connect adds an additional instruction set and sender to the machine
+/// The and_connect method adds an additional instruction set and communication channel to the machine.
+/// The communicate channel ib bound to a default size.
 pub fn and_connect<T, P>(
     machine: &Arc<Mutex<T>>,
 ) -> Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
@@ -51,9 +41,7 @@ where
     sender
 }
 
-///
-/// connect_with_capacity creates a machine with a bounded queue. When full,
-/// the sender will block. However, it will not block the executor.
+/// The connect_with_capacity method creates a machine with a bounded queue of the specified size.
 pub fn connect_with_capacity<T, P>(
     machine: T,
     capacity: usize,
@@ -72,8 +60,8 @@ where
     (machine, sender)
 }
 
-///
-/// and_connect_with_capacity adds an additional instruction set and sender to the machine
+/// The and_connect_with_capacity method adds an additional instruction set and sender to the machine.
+/// The communication channel is bound to the specified size.
 pub fn and_connect_with_capacity<T, P>(
     machine: &Arc<Mutex<T>>,
     capacity: usize,
@@ -89,9 +77,8 @@ where
     sender
 }
 
-///
-/// connect_unbounded creates a machine with an unbounded queue. It can result
-/// in a crash.
+/// The connect_unbounded method creates a machine with an unbounded queue. It can result
+/// in a panic if system resources become exhausted.
 pub fn connect_unbounded<T, P>(
     machine: T,
 ) -> (
@@ -109,8 +96,8 @@ where
     (machine, sender)
 }
 
-///
-/// and_connect_unbounded adds an additional instruction set and sender to the machine
+/// The and_connect_unbounded method adds an additional instruction set and sender to the machine.
+/// The communication channel is unbound.
 pub fn and_connect_unbounded<T, P>(
     machine: &Arc<Mutex<T>>,
 ) -> Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>
@@ -125,15 +112,17 @@ where
     sender
 }
 
-/// This is where bounded channel defaulting is exposed. The default is picked
-/// up and used here, where it can be read and mutated.
-/// The default channel queue size. It can be changed or overridden.
+/// CHANNEL_MAX is the default size for bound communication channels.
 pub const CHANNEL_MAX: usize = 250;
 
 #[allow(dead_code)]
 #[allow(non_upper_case_globals)]
+/// The default_channel_max static is the default used for creating bound channels.
 pub static default_channel_max: AtomicCell<usize> = AtomicCell::new(CHANNEL_MAX);
+/// The get_default_channel_capacity function returns the default value.
 #[allow(dead_code)]
 pub fn get_default_channel_capacity() -> usize { default_channel_max.load() }
+/// The set_default_channel_capacity function sets a new default value.
+/// setting should be performed before starting the server.
 #[allow(dead_code)]
 pub fn set_default_channel_capacity(new: usize) { default_channel_max.store(new); }

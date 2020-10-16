@@ -5,11 +5,9 @@ use d3_components::coordinators::CoordinatorInfo;
 use echo_service::coordinator;
 use monitor_service::monitor;
 
-///
 /// coordinators (I dislike the name) assemble components to form a service.
 /// The idea being that they have an understanding of what's needed and can
 /// call upon components to create instances.
-///
 pub fn configure(
     settings: &settings::Settings,
     components: &[ComponentInfo],
@@ -19,12 +17,12 @@ pub fn configure(
         // c is the coordinator HashMap
         for k in c.keys() {
             let result = match k {
-                settings::Coordinator::EchoCoordinator => coordinator::echo_service::configure(settings, &components),
+                settings::Coordinator::EchoCoordinator => coordinator::echo_service::configure(settings, components),
                 settings::Coordinator::ChatCoordinator => {
-                    chat_service::chat_coordinator::configure(settings, &components)
+                    chat_service::chat_coordinator::configure(settings, components)
                 },
-                settings::Coordinator::MonitorCoordinator => monitor::configure(settings, &components),
-                settings::Coordinator::AliceCoordinator => alice::configure(settings, &components),
+                settings::Coordinator::MonitorCoordinator => monitor::configure(settings, components),
+                settings::Coordinator::AliceCoordinator => alice::configure(settings, components),
                 #[allow(unreachable_patterns)]
                 _ => {
                     log::warn!("unhandled {:#?} coordintor configuration", k);

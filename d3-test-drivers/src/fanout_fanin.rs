@@ -84,7 +84,7 @@ impl FanoutFaninDriver {
             }
             if let Some(receiver) = self.receiver.as_ref() {
                 let expect_count = (self.machine_count - 2) * self.message_count;
-                wait_for_notification(&receiver, expect_count, self.duration);
+                wait_for_notification(receiver, expect_count, self.duration);
             }
         }
     }

@@ -1,4 +1,3 @@
-//!
 //! These are the Benchmarks. We may have already done 80% of the work to minimize the time spent in
 //! overhead activities, such as scheduling and executing. Now, as things change, we need to run
 //! benchmarks to ensure things don't degrade.
@@ -8,7 +7,6 @@
 //! * daisy_chain, which send a pulse of messages to machines, stressing the executor message management.
 //! * fanout-fanin, which causes send blocking, stressing the executor send blocking management.
 //! * chaos-monkey, which causes random machines to have to send messages, stessing the scheduler.
-//!
 
 #![allow(dead_code)]
 
@@ -30,11 +28,9 @@ pub fn bench(c: &mut Criterion) {
     setup();
     let mut group = c.benchmark_group("sched_exec_tests");
     // try to limit the length of test runs
-    //group.significance_level(0.1).sample_size(10).measurement_time(Duration::from_secs(30));
+    // group.significance_level(0.1).sample_size(10).measurement_time(Duration::from_secs(30));
     group.significance_level(0.1);
-    group.bench_function("create_destroy_2000_machines", |b| {
-        b.iter(|| create_destroy_2000_machines())
-    });
+    group.bench_function("create_destroy_2000_machines", |b| b.iter(create_destroy_2000_machines));
 
     let mut fanout_fanin = FanoutFaninDriver::default();
     fanout_fanin.setup();
@@ -82,9 +78,9 @@ pub fn bench_arc(c: &mut Criterion) {
         .sample_size(10)
         .measurement_time(Duration::from_secs(30));
 
-    group.bench_function("arc_test", |b| b.iter(|| arc_test()));
-    group.bench_function("unwrap_arc_test", |b| b.iter(|| unwrap_arc_test()));
-    group.bench_function("no_arc_test", |b| b.iter(|| no_arc_test()));
+    group.bench_function("arc_test", |b| b.iter(arc_test));
+    group.bench_function("unwrap_arc_test", |b| b.iter(unwrap_arc_test));
+    group.bench_function("no_arc_test", |b| b.iter(no_arc_test));
 
     group.finish();
 }
@@ -93,17 +89,15 @@ criterion_group!(benches, bench);
 criterion_main!(benches);
 
 fn setup() {
-    /*
-    use simplelog::*;
+    // use simplelog::*;
     // install a simple logger
-    CombinedLogger::init(vec![TermLogger::new(
-        LevelFilter::Debug,
-        Config::default(),
-        TerminalMode::Mixed,
-        )])
-        .unwrap();
-    */
-    //executor::set_selector_maintenance_duration(Duration::from_millis(20));
+    // CombinedLogger::init(vec![TermLogger::new(
+    // LevelFilter::Debug,
+    // Config::default(),
+    // TerminalMode::Mixed,
+    // )])
+    // .unwrap();
+    // executor::set_selector_maintenance_duration(Duration::from_millis(20));
     executor::set_machine_count_estimate(5000);
     executor::set_default_channel_capacity(500);
     executor::start_server();

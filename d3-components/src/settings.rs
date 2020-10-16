@@ -5,11 +5,9 @@ use config::{Config, ConfigError, Environment, File};
 use std::collections::{HashMap, HashSet};
 use std::env;
 
-///
 /// Its unfortunate that we need to make all the bits public. There's
 /// possibly a way to avoid this with serde; I haven't figured it out
 /// yet.
-///
 
 /// This is the top-level settings object
 #[derive(Debug, Default, Deserialize)]

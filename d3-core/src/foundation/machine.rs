@@ -1,37 +1,39 @@
 use super::*;
 
-/// Machines cooperate in a collective. There are several primary traits
-/// that are presented here. Combined, they form the contract between
-/// the machines, allowing them to interact with each other.
+// Machines cooperate in a collective. There are several primary traits
+// that are presented here. Combined, they form the contract between
+// the machines, allowing them to interact with each other.
+//
+// The MachineImpl designates an instruction set, which machines implement.
+// It carries with it, two adapters and an instruction set. The ReceiverAdapter
+// is the primary means of expressing the machine. The SenderAdapter is
+// ancilary, used for parking a sender, which would otherwise block the
+// executor.
+//
+// To aid in construction, there's a derive macro, MachineImpl, which should
+// be used to designate the instruction sets which machines implement.
+// A machine may implement one or more of these.
+//
+// Examples
+//
+//     #[derive(Copy, Clone, Debug, Eq, MachineImpl, PartialEq, SmartDefault)]
+//     #[allow(dead_code)]
+//     pub enum ActivationCommands {
+//         #[default]
+//         Start,
+//         Stop,
+//     }
+//
 
-///
-/// The MachineImpl designates an instruction set, which machines implement.
-/// It carries with it, two adapters and an instruction set. The ReceiverAdapter
-/// is the primary means of expressing the machine. The SenderAdapter is
-/// ancilary, used for parking a sender, which would otherwise block the
-/// executor.
-///
-/// To aid in construction, there's a derive macro, MachineImpl, which should
-/// be used to designate the instruction sets which machines implement.
-/// A machine may implement one or more of these.
-///
-/// Example:
-///     #[derive(Copy, Clone, Debug, Eq, MachineImpl, PartialEq, SmartDefault)]
-///     #[allow(dead_code)]
-///     pub enum ActivationCommands {
-///         #[default]
-///         Start,
-///         Stop,
-///     }
-
-/// Each enum, that is an instuction set, derives MachineImpl.
+// Each enum, that is an instuction set, derives MachineImpl.
+#[doc(hidden)]
 pub trait MachineImpl: 'static + Send + Sync {
     type Adapter;
     type SenderAdapter;
     type InstructionSet: Send + Sync;
 
-    /// Park a sender. If the sender can't be parked, the instruction
-    /// is returned.
+    // Park a sender. If the sender can't be parked, the instruction
+    // is returned.
     fn park_sender(
         channel_id: usize,
         sender: crossbeam::Sender<Self::InstructionSet>,
@@ -46,16 +48,20 @@ pub trait Machine<T>: Send + Sync
 where
     T: 'static + Send + Sync,
 {
-    /// receive an instruction
+    /// The receive method receives instructions sent to it by itself or other machines.
     fn receive(&self, cmd: T);
-    /// notification that the machine has become disconnect and will no longer receive instructions
+    /// The disconnected method is called to notify the machine that it has become disconnect and will no longer receive instructions.
+    /// This could be a result of server shutdown, or all senders dropping their senders.
     fn disconnected(&self) {}
-    /// notification that the machine has become connected and may receive instructions
+    /// The connected method is called once, before receive messages. It provides a notification that the
+    /// machine has become connected and may receive instructions. It includes a Uuid for the machine,
+    /// whic hmay be usedin logging. A machine implementing several instruction sets will receive a differnt
+    /// Uuid for each instruction set.
     fn connected(&self, _uuid: Uuid) {}
 }
 
-/// Adding the machine implementation to Mutex
-/// makes it possible to hide the underlying wrapping.
+// Adding the machine implementation to Mutex
+// makes it possible to hide the underlying wrapping.
 impl<T, P> Machine<P> for Mutex<T>
 where
     T: Machine<P>,

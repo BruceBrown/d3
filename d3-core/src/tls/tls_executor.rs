@@ -1,10 +1,10 @@
 use self::collective::*;
 use super::*;
-///
-/// This is the TLS data for the executor. It is used by the channel and the executor;
-/// Otherwise, this would be much higher in the stack.
+// This is the TLS data for the executor. It is used by the channel and the executor;
+// Otherwise, this would be much higher in the stack.
 
-/// A Task, actually a task for the executor
+// A Task, actually a task for the executor
+#[doc(hidden)]
 pub struct Task {
     pub start: Instant,
     pub machine: ShareableMachine,
@@ -18,7 +18,7 @@ impl Task {
     }
 }
 
-/// A task for the scheduler, which will reschedule the machine
+// A task for the scheduler, which will reschedule the machine
 pub struct SchedTask {
     pub start: Instant,
     pub machine_key: usize,
@@ -32,8 +32,7 @@ impl SchedTask {
     }
 }
 
-/// Executor statistics.
-/// It lives here due to the ShareableMachine having it in a method signature
+/// The ExecutorStats expose metrics for each executor.
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct ExecutorStats {
     pub id: usize,
@@ -46,8 +45,7 @@ pub struct ExecutorStats {
     pub time_on_queue: std::time::Duration,
 }
 
-///
-/// The state of the executor
+// The state of the executor
 #[derive(Copy, Clone, Eq, PartialEq, SmartDefault, Debug)]
 pub enum ExecutorState {
     #[default]
@@ -57,18 +55,19 @@ pub enum ExecutorState {
     Running,
 }
 
-///
-/// Encapsualted send errors
+// Encapsualted send errors
+#[doc(hidden)]
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum TrySendError {
-    /// The message could not be sent because the channel is full and the operation timed out.
+    // The message could not be sent because the channel is full and the operation timed out.
     Full,
-    /// The message could not be sent because the channel is disconnected.
+    // The message could not be sent because the channel is disconnected.
     Disconnected,
 }
 
-/// Analogous the the ShareableMachine, the SharedCollectiveSenderAdapter encapsulates
-/// and adapter containing a wrapped CollectiveSenderAdapter, which encapsulates Sender<T> and T.
+// Analogous the the ShareableMachine, the SharedCollectiveSenderAdapter encapsulates
+// and adapter containing a wrapped CollectiveSenderAdapter, which encapsulates Sender<T> and T.
+#[doc(hidden)]
 pub struct SharedCollectiveSenderAdapter {
     pub id: Uuid,
     pub key: usize,
@@ -77,26 +76,27 @@ pub struct SharedCollectiveSenderAdapter {
     pub normalized_adapter: CommonCollectiveSenderAdapter,
 }
 impl SharedCollectiveSenderAdapter {
-    /// Get the id of the sending machine
+    // Get the id of the sending machine
     pub const fn get_id(&self) -> Uuid { self.id }
-    /// Get the key of the sending machine
-    pub fn get_key(&self) -> usize { self.key }
-    /// Try to send the message
+    // Get the key of the sending machine
+    pub const fn get_key(&self) -> usize { self.key }
+    // Try to send the message
     pub fn try_send(&mut self) -> Result<(), TrySendError> { self.normalized_adapter.try_send() }
 }
 
+#[doc(hidden)]
 pub trait CollectiveSenderAdapter {
-    /// Get the id of the sending machine
+    // Get the id of the sending machine
     fn get_id(&self) -> Uuid;
-    /// Get the key of the sending machine
+    // Get the key of the sending machine
     fn get_key(&self) -> usize;
-    /// Try to send the message
+    // Try to send the message
     fn try_send(&mut self) -> Result<(), TrySendError>;
 }
 pub type CommonCollectiveSenderAdapter = Box<dyn CollectiveSenderAdapter>;
 
-/// This is information that the executor thread shares with the worker, allowing
-/// the big executor insight into what the executor is up to.
+// This is information that the executor thread shares with the worker, allowing
+// the big executor insight into what the executor is up to.
 #[derive(Debug)]
 pub struct SharedExecutorInfo {
     state: ExecutorState,
@@ -108,7 +108,7 @@ impl SharedExecutorInfo {
         self.start_idle
     }
     pub fn set_state(&mut self, new: ExecutorState) { self.state = new }
-    pub fn get_state(&self) -> ExecutorState { self.state }
+    pub const fn get_state(&self) -> ExecutorState { self.state }
     pub fn compare_set_state(&mut self, old: ExecutorState, new: ExecutorState) {
         if self.state == old {
             self.state = new
@@ -125,10 +125,10 @@ impl Default for SharedExecutorInfo {
     }
 }
 
-///
-/// ExecutorData is TLS for the executor. Among other things, it provides bridging
-/// for the channel to allow a sender to park, while allowing the executor to continue
-/// processing work
+// ExecutorData is TLS for the executor. Among other things, it provides bridging
+// for the channel to allow a sender to park, while allowing the executor to continue
+// processing work
+#[doc(hidden)]
 #[derive(Default)]
 pub struct ExecutorData {
     pub id: usize,
@@ -267,7 +267,8 @@ impl ExecutorData {
     }
 }
 
-/// Encoding the structs as a variant allows it to be stored in the TLS as a field.
+// Encoding the structs as a variant allows it to be stored in the TLS as a field.
+#[doc(hidden)]
 #[derive(SmartDefault)]
 pub enum ExecutorDataField {
     #[default]
@@ -276,16 +277,17 @@ pub enum ExecutorDataField {
     Machine(ShareableMachine),
 }
 
-/// The trait that allows the executor to perform notifications
+// The trait that allows the executor to perform notifications
 pub trait ExecutorNotifier: Send + Sync + 'static {
-    /// Send a notificiation that the executor is parked
+    // Send a notificiation that the executor is parked
     fn notify_parked(&self, executor_id: usize);
-    /// Send a notification that a parked sender is no long parked, and can be scheduled
+    // Send a notification that a parked sender is no long parked, and can be scheduled
     fn notify_can_schedule(&self, machine_key: usize);
 }
 pub type ExecutorNotifierObj = std::sync::Arc<dyn ExecutorNotifier>;
 
 thread_local! {
+    #[doc(hidden)]
     #[allow(non_upper_case_globals)]
     pub static tls_executor_data: RefCell<ExecutorData> = RefCell::new(ExecutorData::default());
 }

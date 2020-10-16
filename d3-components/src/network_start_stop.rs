@@ -2,24 +2,11 @@
 use super::*;
 
 use crate::mio_network::new_network_factory;
-///
-/// While much of d3 is focussed on data drive dispatch of machines, we can't ignore the fact that
-/// we're going to have to deal with networks. Afterall, the whole point of doing this is to build
-/// a server model, and what good is a server if it can't interact with the outside world. So, here
-/// we go...
-///
-/// Mio provides the low-level notifications that the network needs servicing. We're still going to
-/// rely upon machines to perform the services. we're going to use mio as a signalling layer.
-/// Much like how we use Crossbeam select to schedule machines, we're going to use Mio polling
-/// to do the same for those few machines which facilitate communicating with the outside world.
-///
-/// Mostly, we're porting the example. Instead of main, we'll launch a thread. We're going to forego
-/// logging, as I've got an idea for that were we have a very thin UDP logging to something else.
-/// The idea being you're goingto be in a docker kind of world, where our server should focus
-/// on handling data, and another, local server, should focus on logging and yet anotehr should focus
-/// on metrics.
-///
 
+/// Internally, an AtomicCell<NetworkState>, is used for determining the state
+/// of the network. This used by start_network(), stop_network(). An
+/// AtomicRefCell<Network> is used to access the network struct. Both are operating
+/// as singletons, which I'm really not happy with.
 #[allow(non_upper_case_globals)]
 static network_state: AtomicCell<NetworkState> = AtomicCell::new(NetworkState::Stopped);
 
@@ -29,7 +16,7 @@ static network: AtomicRefCell<Network> = AtomicRefCell::new(Network {
     network_sender: NetworkField::Uninitialized,
 });
 
-/// This is the network state
+/// The NetworkState describes each of the states the network can be in
 #[derive(Debug, Copy, Clone, Eq, PartialEq, SmartDefault)]
 enum NetworkState {
     #[default]
@@ -39,6 +26,9 @@ enum NetworkState {
     Running,
 }
 
+/// NetworkFields are used to allow a default Network struct, the fields
+/// provide an Uninitialized variant, along with a varient for each field
+/// in the Network struct that can't otherwise be defaulted.
 #[derive(SmartDefault)]
 enum NetworkField {
     #[default]
@@ -47,15 +37,16 @@ enum NetworkField {
     NetworkSender(NetSender),
 }
 
-/// The network
+/// The Network struct contains fields used by start_network(), stop_network(),
+/// and get_network_sender().
 #[derive(SmartDefault)]
-pub struct Network {
+struct Network {
     network_control: NetworkField,
     network_sender: NetworkField,
 }
 impl Network {
     /// get the network sender
-    pub fn get_sender() -> NetSender {
+    fn get_sender() -> NetSender {
         match &network.borrow().network_sender {
             NetworkField::NetworkSender(network_sender) => network_sender.clone(),
             _ => panic!("network is not running, unable to get sender."),
@@ -64,9 +55,13 @@ impl Network {
 }
 
 #[inline]
+/// Obtain the network's sender. The returned sender is a clone,
+/// that you are free to use, further clone, or drop. Tip: cache
+/// the result and clone it when you need to send it.
 pub fn get_network_sender() -> NetSender { Network::get_sender() }
 
-/// start the network
+/// Start the network. Starting does not perform any network bindings, it
+/// prepares the network to accept bindings.
 pub fn start_network() {
     network_state.store(NetworkState::Initializing);
     let network_factory = new_network_factory();
@@ -78,7 +73,8 @@ pub fn start_network() {
     network_state.store(NetworkState::Running);
 }
 
-/// stop the network
+/// Stop the network. Stopping will close all network connections and
+/// listeners and no further network activity is allowed.
 pub fn stop_network() {
     network_state.store(NetworkState::Stopping);
     if let NetworkField::Network(network_control) = &network.borrow().network_control {
@@ -91,18 +87,20 @@ pub fn stop_network() {
     network_state.store(NetworkState::Stopped);
 }
 
-// The factory for the network
+/// The factory for the network
 pub trait NetworkFactory {
     /// get a clone of the sender for the network
     fn get_sender(&self) -> NetSender;
     /// start the network
     fn start(&self) -> NetworkControlObj;
 }
+/// The trait object for the network factory
 pub type NetworkFactoryObj = Arc<dyn NetworkFactory>;
 
-// The controller for the system monitor.
+// The controller for the network.
 pub trait NetworkControl: Send + Sync {
     /// stop the network
     fn stop(&self);
 }
+/// The trait object for the network controller
 pub type NetworkControlObj = Arc<dyn NetworkControl>;

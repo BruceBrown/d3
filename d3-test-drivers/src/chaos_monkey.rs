@@ -1,4 +1,4 @@
-use self::forwarder::{ChaosMonkey, Forwarder};
+use self::forwarder::Forwarder;
 use super::*;
 
 /// ChaosMonkey will setup a network of machines in which a message received by any machine
@@ -19,7 +19,6 @@ use super::*;
 /// The message count represents concurrent number of messages flowing through the machines,
 /// while the inflection value represents the lifetime of the message. Varing the machine count
 /// varies the number of messages a machine may receive.
-///
 #[derive(Debug, SmartDefault)]
 pub struct ChaosMonkeyDriver {
     #[default = 2000]
@@ -95,12 +94,17 @@ impl ChaosMonkeyDriver {
         let range = Uniform::from(0 .. self.senders.len());
         let mut rng = rand::rngs::OsRng::default();
         for _ in 0 .. self.message_count {
-            let m = ChaosMonkey::new(self.inflection_value);
             let idx = range.sample(&mut rng);
-            self.senders[idx].send(m.as_variant()).unwrap();
+            self.senders[idx]
+                .send(TestMessage::ChaosMonkey {
+                    counter: 0,
+                    max: self.inflection_value,
+                    mutation: ChaosMonkeyMutation::Increment,
+                })
+                .unwrap();
         }
         if let Some(receiver) = self.receiver.as_ref() {
-            wait_for_notification(&receiver, self.message_count, self.duration);
+            wait_for_notification(receiver, self.message_count, self.duration);
         }
     }
 }

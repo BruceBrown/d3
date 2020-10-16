@@ -6,7 +6,6 @@ use echo_service::component;
 /// This is the entry point for getting all the components configured and active.
 /// It lives in main, but may move. It needs to be very high in the stack as it
 /// communicates with services.
-///
 
 /// configure enabled components and return their senders.
 pub fn configure(settings: &settings::Settings) -> Result<Vec<ComponentInfo>, ComponentError> {
@@ -17,10 +16,10 @@ pub fn configure(settings: &settings::Settings) -> Result<Vec<ComponentInfo>, Co
             let config = SimpleConfig::from(v);
             if config.enabled {
                 let result = match k {
-                    settings::Component::EchoConsumer => component::echo_consumer::configure(config, &settings),
-                    settings::Component::EchoProducer => component::echo_producer::configure(config, &settings),
-                    settings::Component::ChatConsumer => chat_service::chat_consumer::configure(config, &settings),
-                    settings::Component::ChatProducer => chat_service::chat_producer::configure(config, &settings),
+                    settings::Component::EchoConsumer => component::echo_consumer::configure(config, settings),
+                    settings::Component::EchoProducer => component::echo_producer::configure(config, settings),
+                    settings::Component::ChatConsumer => chat_service::chat_consumer::configure(config, settings),
+                    settings::Component::ChatProducer => chat_service::chat_producer::configure(config, settings),
                     #[allow(unreachable_patterns)]
                     _ => {
                         log::warn!("unhandled {:#?} component configuration", k);

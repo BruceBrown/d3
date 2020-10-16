@@ -21,9 +21,9 @@ mod tests {
 
     static BARRIER: AtomicUsize = AtomicUsize::new(0);
     // common function for wrapping a test with setup/teardown logic
-    pub fn run_test<T>(test: T) -> ()
+    pub fn run_test<T>(test: T)
     where
-        T: FnOnce() -> () + panic::UnwindSafe,
+        T: FnOnce() + panic::UnwindSafe,
     {
         let backoff = crossbeam::utils::Backoff::new();
         loop {
@@ -127,7 +127,7 @@ mod tests {
             let f = Forwarder::new(1);
             let (_t, s) = executor::connect(f);
             let (sender, r) = channel();
-            s.send(TestMessage::AddSender(sender.clone())).unwrap();
+            s.send(TestMessage::AddSender(sender)).unwrap();
             s.send(TestMessage::Test).unwrap();
             let m = r.recv_timeout(Duration::from_secs(1)).unwrap();
             assert_eq!(m, TestMessage::Test);
@@ -140,7 +140,7 @@ mod tests {
             let f = Forwarder::new(1);
             let (_t, s) = executor::connect(f);
             let (sender, r) = channel();
-            s.send(TestMessage::Notify(sender.clone(), 2)).unwrap();
+            s.send(TestMessage::Notify(sender, 2)).unwrap();
             s.send(TestMessage::Test).unwrap();
             match r.recv_timeout(Duration::from_millis(100)) {
                 Ok(_m) => panic!("notification arrived early"),
@@ -161,8 +161,8 @@ mod tests {
             let (_t, s) = executor::connect(f);
             let (sender1, r1) = channel();
             let (sender2, r2) = channel();
-            s.send(TestMessage::AddSender(sender1.clone())).unwrap();
-            s.send(TestMessage::AddSender(sender2.clone())).unwrap();
+            s.send(TestMessage::AddSender(sender1)).unwrap();
+            s.send(TestMessage::AddSender(sender2)).unwrap();
             s.send(TestMessage::Test).unwrap();
             let m = r1.recv_timeout(Duration::from_secs(1)).unwrap();
             assert_eq!(m, TestMessage::Test);

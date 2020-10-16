@@ -2,11 +2,9 @@ use self::sched::DefaultScheduler;
 use self::traits::*;
 use super::*;
 
-///
 /// The sceduler factory provides a standard interface for creating
 /// a scheduler. Additionally, a different scheduler can be used dropped
 /// in without impacting the interface.
-///
 
 /// create the factory for creating and starting the scheduler
 pub fn create_sched_factory() -> impl SchedulerFactory { Factory::new() }

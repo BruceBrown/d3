@@ -4,21 +4,54 @@ use quote::{format_ident, quote};
 use syn::parse_macro_input;
 use syn::DeriveInput;
 
-/// #[derive(MachineImpl)]
+/// MachineImpl is a derive macro that tranforms an enum into an instruction set that can be implemented
+/// by machines.
 ///
-/// Add (MachineImpl) to and enum's derive list to generate the code
-/// necessary for transforming that enum into a set of directives for
-/// a machine. The resulting code implements a MachineImpl for that
-/// instruction set, along with several adapters to form the basis
-/// of a machine which can interact with other maachines.
+/// # Example
 ///
+/// ```text
+/// #[macro_use] extern crate d3_derive;
+/// use d3_core::MachineImpl::*;
+///
+/// // instructions can be unit-like
+/// #[derive(Debug, MachineImpl)]
+/// pub enum StateTable {
+///     Init,
+///     Start,
+///     Stop,
+/// }
+///
+/// // instructions can also be tupple, and struct
+/// #[derive(Debug, MachineImpl)]
+/// pub enum TrafficLight {
+///     Red(TrafficLightModality),
+///     Green(TrafficLightModality),
+///     Yellow(TrafficLightModality),
+/// }
+///
+/// #[derive(Debug)]
+/// pub enum TrafficLightModality {
+///     Solid,
+///     Blinking,
+/// }
+///
+/// Instructions can be mixed
+/// #[derive(Debug, MachineImpl)]
+/// pub enum Calc {
+///     Clear,
+///     Add(u32),
+///     Sub(u32),
+///     Div(u32),
+///     Mul(u32),
+/// }
+/// ```
 #[proc_macro_derive(MachineImpl)]
 pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
     let adapter_ident = format_ident!("MachineBuilder{}", name.to_string());
     let sender_adapter_ident = format_ident!("SenderAdapter{}", name.to_string());
-    //let recv_wait_ident = format_ident!("RecvWait{}", name.to_string());
+    // let recv_wait_ident = format_ident!("RecvWait{}", name.to_string());
     let expanded = quote! {
         impl MachineImpl for #name {
             type Adapter = #adapter_ident;
@@ -60,8 +93,9 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         // this for each instruction sent, so we're going to wrap the instruction
         // with Arc<Mutex> to allow inner access, kinda sucks cuz the lifecycle is
         // such that there is only one owner at a time. Let's see if Arc<> is good enough
+        #[doc(hidden)]
         pub struct #adapter_ident {
-            pub machine: Arc<dyn Machine<#name>>,
+            pub machine: std::sync::Arc<dyn Machine<#name>>,
             pub receiver: Receiver<#name>,
             pub instruction: crossbeam::atomic::AtomicCell<Option<#name>>,
         }
@@ -91,13 +125,13 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                     Err(crossbeam::TryRecvError::Empty) => None,
                     Err(crossbeam::TryRecvError::Disconnected) => {
                         machine.state.set(CollectiveState::Disconnected);
-                        let task_adapter = Arc::clone(machine);
+                        let task_adapter = std::sync::Arc::clone(machine);
                         let task = Task{start: std::time::Instant::now(), machine: task_adapter };
                         Some(task)
                     }
                     Ok(instruction) => {
                         machine.state.set(CollectiveState::Ready);
-                        let task_adapter = Arc::clone(machine);
+                        let task_adapter = std::sync::Arc::clone(machine);
                         self.set_instruction(Some(instruction));
                         let task = Task{start: std::time::Instant::now(), machine: task_adapter };
                         Some(task)
@@ -139,7 +173,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 }
             }
         }
-
+        #[doc(hidden)]
         pub struct #sender_adapter_ident {
             pub id: uuid::Uuid,
             pub key: usize,
@@ -184,10 +218,9 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
 
         impl MachineBuilder for #adapter_ident {
             type InstructionSet = #name;
-
             /// Consume a raw machine, using it to create a machine that is usable by
             /// the framework.
-            fn build_raw<T>(raw: T, channel_capacity: usize) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
+            fn build_raw<T>(raw: T, channel_capacity: usize) -> (std::sync::Arc<std::sync::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -195,7 +228,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_common(raw, sender, receiver)
             }
 
-            fn build_addition<T>(machine: &Arc<Mutex<T>>, channel_capacity: usize) -> (Sender<Self::InstructionSet>, MachineAdapter)
+            fn build_addition<T>(machine: &std::sync::Arc<std::sync::Mutex<T>>, channel_capacity: usize) -> (Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -203,7 +236,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_addition_common(machine, sender, receiver)
             }
 
-            fn build_unbounded<T>(raw: T) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
+            fn build_unbounded<T>(raw: T) -> (std::sync::Arc<std::sync::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -211,7 +244,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_common(raw, sender, receiver)
             }
 
-            fn build_addition_unbounded<T>(machine: &Arc<Mutex<T>>) -> (Sender<Self::InstructionSet>, MachineAdapter)
+            fn build_addition_unbounded<T>(machine: &std::sync::Arc<std::sync::Mutex<T>>) -> (Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -219,13 +252,13 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_addition_common(machine, sender, receiver)
             }
 
-            fn build_common<T>(raw: T, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter )
+            fn build_common<T>(raw: T, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (std::sync::Arc<std::sync::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter )
                 where T: 'static + Machine<Self::InstructionSet>
             {
                  // wrap it
-                 let instance: Arc<Mutex<T>> = Arc::new(Mutex::new(raw));
+                 let instance: std::sync::Arc<std::sync::Mutex<T>> = std::sync::Arc::new(std::sync::Mutex::new(raw));
                  // clone it, making it look like a machine, Machine for Mutex<T> facilitates this
-                 let machine = Arc::clone(&instance) as Arc<dyn Machine<Self::InstructionSet>>;
+                 let machine = std::sync::Arc::clone(&instance) as std::sync::Arc<dyn Machine<Self::InstructionSet>>;
                  // wrap the machine dependent bits
                  let adapter = Self {
                      machine, receiver,
@@ -236,11 +269,11 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                  (instance, sender, machine_adapter)
             }
 
-            fn build_addition_common<T>(machine: &Arc<Mutex<T>>, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Sender<Self::InstructionSet>, MachineAdapter )
+            fn build_addition_common<T>(machine: &std::sync::Arc<std::sync::Mutex<T>>, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Sender<Self::InstructionSet>, MachineAdapter )
                 where T: 'static + Machine<Self::InstructionSet>
             {
                  // clone it, making it look like a machine, Machine for Mutex<T> facilitates this
-                 let machine = Arc::clone(machine) as Arc<dyn Machine<Self::InstructionSet>>;
+                 let machine = std::sync::Arc::clone(machine) as std::sync::Arc<dyn Machine<Self::InstructionSet>>;
                  // wrap the machine dependent bits
                  let adapter = Self {
                      machine, receiver,

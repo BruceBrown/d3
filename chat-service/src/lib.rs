@@ -12,7 +12,6 @@
 //! * chat_coordinator::configure()
 //! * chat_producer::configure()
 //! * chat_consumer::configure()
-//!
 #[allow(unused_imports)]
 #[macro_use]
 extern crate smart_default;
@@ -25,6 +24,7 @@ use uuid::{self};
 
 #[allow(unused_imports)] use d3_core::executor::{self};
 use d3_core::machine_impl::*;
+use d3_core::send_cmd;
 use d3_derive::*;
 
 use d3_components::components::{AnySender, ComponentCmd, ComponentError, ComponentSender};
@@ -48,7 +48,6 @@ mod tests {
 
     #[test]
     fn chat_server() {
-        //
         // This illustrates how the chat server is configured and fits into the server model.
         //
 

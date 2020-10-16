@@ -20,7 +20,7 @@ pub fn configure(
 struct ConsumerComponent {}
 
 impl ConsumerComponent {
-    pub fn new() -> Self { Self {} }
+    pub const fn new() -> Self { Self {} }
     fn create_instance(&self, conn_id: u128, any_sender: AnySender) {
         if let Ok(session_sender) = Arc::clone(&any_sender).downcast::<Sender<EchoCmd>>() {
             let (_instance, sender) = executor::connect(EchoInstance::new(conn_id));
@@ -75,7 +75,7 @@ impl EchoInstance {
             .unwrap()
             .senders
             .iter()
-            .for_each(|s| send_cmd(&s, EchoCmd::NewData(conn_id, Arc::clone(bytes))));
+            .for_each(|s| send_cmd(s, EchoCmd::NewData(conn_id, Arc::clone(bytes))));
     }
 }
 

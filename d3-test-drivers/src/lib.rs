@@ -1,3 +1,6 @@
+//! This crate includes commonly used machines and machine setup. They are used
+//! in bench and integration tests. They can also be configured and run with the
+//! td3-test-server.
 #[macro_use] extern crate smart_default;
 
 use std::sync::atomic::{AtomicUsize, Ordering};

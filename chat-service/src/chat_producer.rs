@@ -25,7 +25,6 @@
 //!
 //! While this could have been written simpler, using a single component, it is an objective to illustrate
 //! how components interact and are wired together.
-//!
 #![allow(dead_code)]
 use super::*;
 
@@ -47,7 +46,7 @@ pub fn configure(
 #[derive(Debug, Default)]
 struct ProducerComponent {}
 impl ProducerComponent {
-    pub fn new() -> Self { Self {} }
+    pub const fn new() -> Self { Self {} }
 
     // create a producer for the new connection
     fn create_instance(&self, conn_uuid: u128, any_sender: AnySender) {
@@ -113,7 +112,7 @@ impl ChatInstance {
         }
         self.mutable.lock().unwrap().senders.iter().for_each(|s| {
             log::debug!("producer {} sending RemoveSink to coordinator", self.session_id);
-            send_cmd(&s, ChatCmd::RemoveSink(conn_uuid));
+            send_cmd(s, ChatCmd::RemoveSink(conn_uuid));
         });
     }
 
@@ -121,7 +120,7 @@ impl ChatInstance {
     fn new_data(&self, _conn_id: u128, bytes: &Data) {
         self.mutable.lock().unwrap().senders.iter().for_each(|s| {
             log::debug!("producer {} sending to coordinator", self.session_id);
-            send_cmd(&s, ChatCmd::NewData(self.session_id, Arc::clone(bytes)));
+            send_cmd(s, ChatCmd::NewData(self.session_id, Arc::clone(bytes)));
         });
     }
 }

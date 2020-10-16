@@ -1,16 +1,15 @@
 use self::{executor::*, overwatch::*, traits::*};
 use super::*;
 
-///
-/// A bit of an explanation is needed here. The server state and server struct live in
-/// two statics: server_state and server. The server_state is an AtomicCell, which makes
-/// it just a bit safer in the case of some weird use case where multiple threads want
-/// to start and stop the server -- such as parallel testing.
-///
-/// The server is an AtomicRefCell, and its fields all come from the ServerField enum.
-/// This allows for something the compiler is happy with, while at the same time providing
-/// a decent structure for when the server is running.
-///
+// A bit of an explanation is needed here. The server state and server struct live in
+// two statics: server_state and server. The server_state is an AtomicCell, which makes
+// it just a bit safer in the case of some weird use case where multiple threads want
+// to start and stop the server -- such as parallel testing.
+//
+// The server is an AtomicRefCell, and its fields all come from the ServerField enum.
+// This allows for something the compiler is happy with, while at the same time providing
+// a decent structure for when the server is running.
+//
 
 #[allow(non_upper_case_globals)]
 static server_state: AtomicCell<ServerState> = AtomicCell::new(ServerState::Stopped);
@@ -22,7 +21,7 @@ static server: AtomicRefCell<Server> = AtomicRefCell::new(Server {
     monitor: ServerField::Uninitialized,
 });
 
-/// This is the server state
+// This is the server state
 #[derive(Debug, Copy, Clone, Eq, PartialEq, SmartDefault)]
 enum ServerState {
     #[default]
@@ -32,7 +31,7 @@ enum ServerState {
     Running,
 }
 
-/// These are the aforementioned server fields. The server owns the scheduler, executor and monitor.
+// These are the aforementioned server fields. The server owns the scheduler, executor and monitor.
 #[derive(SmartDefault)]
 enum ServerField {
     #[default]
@@ -42,7 +41,7 @@ enum ServerField {
     Monitor(MonitorControlObj),
 }
 
-/// The server
+// The server
 #[derive(SmartDefault)]
 pub struct Server {
     scheduler: ServerField,
@@ -50,28 +49,28 @@ pub struct Server {
     monitor: ServerField,
 }
 impl Server {
-    /// assign a machine to the scheduler
+    // assign a machine to the scheduler
     pub fn assign_machine(machine: MachineAdapter) {
         match &server.borrow().scheduler {
             ServerField::Scheduler(scheduler) => scheduler.assign_machine(machine),
             _ => log::error!("Server not running, unable to assign machine."),
         }
     }
-    /// add a stats sender to the system monitor
+    // add a stats sender to the system monitor
     fn add_core_stats_sender(sender: CoreStatsSender) {
         match &server.borrow().monitor {
             ServerField::Monitor(monitor) => monitor.add_sender(sender),
             _ => log::error!("Server not running, unable to add stats sender."),
         }
     }
-    /// remove a stats sender to the system monitor
+    // remove a stats sender to the system monitor
     fn remove_core_stats_sender(sender: CoreStatsSender) {
         match &server.borrow().monitor {
             ServerField::Monitor(monitor) => monitor.remove_sender(sender),
             _ => log::error!("Server not running, unable to add stats sender."),
         }
     }
-    /// wake executor threads
+    // wake executor threads
     pub fn wake_executor_threads() {
         match &server.borrow().executor {
             ServerField::Executor(executor) => executor.wake_parked_threads(),
@@ -80,11 +79,16 @@ impl Server {
     }
 }
 
+/// The add_core_stats_sender function adds a sender to the list of senders receiving
+/// core statistic updates.
 pub fn add_core_stats_sender(sender: CoreStatsSender) { Server::add_core_stats_sender(sender); }
 
+/// The remove_core_stats_sender function removes a sender from the list of senders receiving
+/// core statistic updates.
 pub fn remove_core_stats_sender(sender: CoreStatsSender) { Server::remove_core_stats_sender(sender); }
 
-/// start the server
+/// The start_server function starts the server, putting it in a state where it can create machines
+/// that are connected to the collective.
 pub fn start_server() {
     log::info!("starting server");
     if get_executor_count() == 0 {
@@ -113,7 +117,7 @@ pub fn start_server() {
     log::info!("server is now running");
 }
 
-/// stop the server
+/// The stop_server function stops the server, releasing all resources.
 pub fn stop_server() {
     log::info!("stopping server");
     server_state.store(ServerState::Stopping);
@@ -137,16 +141,17 @@ pub fn stop_server() {
     log::info!("server is now stopped");
 }
 
-///
-/// Control the number of executor threads. The default originates
-/// here. It can be read and mutated, mutations after starting the
-/// server have no effect.
-#[allow(dead_code)]
-#[allow(non_upper_case_globals)]
+#[doc(hidden)]
+#[allow(dead_code, non_upper_case_globals)]
 pub static executor_count: AtomicCell<usize> = AtomicCell::new(0);
-#[allow(dead_code)]
+
+/// The get_executor_count returns the number of executor threads.
+#[allow(dead_code, non_upper_case_globals)]
 pub fn get_executor_count() -> usize { executor_count.load() }
-#[allow(dead_code)]
+
+/// The set_executor_count sets the number of executor threads.
+/// This should be performed prior to starting the server.
+#[allow(dead_code, non_upper_case_globals)]
 pub fn set_executor_count(new: usize) { executor_count.store(new); }
 
 #[cfg(test)]
@@ -157,9 +162,9 @@ pub mod tests {
     use std::panic;
 
     // common function for wrapping a test with setup/teardown logic
-    pub fn run_test<T>(test: T) -> ()
+    pub fn run_test<T>(test: T)
     where
-        T: FnOnce() -> () + panic::UnwindSafe,
+        T: FnOnce() + panic::UnwindSafe,
     {
         // install a simple logger
         CombinedLogger::init(vec![TermLogger::new(

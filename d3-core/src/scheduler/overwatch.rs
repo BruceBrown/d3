@@ -3,7 +3,7 @@ use super::*;
 
 type MonitorReceiver = crossbeam::Receiver<MonitorMessage>;
 
-/// The factory for creating the system monitor.
+// The factory for creating the system monitor.
 pub struct SystemMonitorFactory {
     sender: MonitorSender,
     receiver: MonitorReceiver,
@@ -25,15 +25,14 @@ impl MonitorFactory for SystemMonitorFactory {
 
 const MONITOR_QUEUE_MAX: usize = 100;
 
-///
-/// There should only be one system monitor
+// There should only be one system monitor
 pub struct SystemMonitor {
     sender: MonitorSender,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl SystemMonitor {
-    /// Start the system monitor. The sooner, the better.
+    // Start the system monitor. The sooner, the better.
     fn start(sender: MonitorSender, receiver: MonitorReceiver, executor: ExecutorControlObj) -> MonitorControlObj {
         let monitor = Self {
             sender,
@@ -42,22 +41,22 @@ impl SystemMonitor {
         Arc::new(monitor)
     }
 
-    /// Stop the system monitor. Late stopping is recommended.
+    // Stop the system monitor. Late stopping is recommended.
     fn stop(&self) { if self.sender.send(MonitorMessage::Terminate).is_err() {} }
 }
 
 impl MonitorControl for SystemMonitor {
-    /// stop the system monitor
+    // stop the system monitor
     fn stop(&self) { self.stop(); }
-    /// add a stats sender to the system monitor
+    // add a stats sender to the system monitor
     fn add_sender(&self, sender: CoreStatsSender) { if self.sender.send(MonitorMessage::AddSender(sender)).is_err() {} }
-    /// remove a stats sender to the system monitor
+    // remove a stats sender to the system monitor
     fn remove_sender(&self, sender: CoreStatsSender) {
         if self.sender.send(MonitorMessage::AddSender(sender)).is_err() {}
     }
 }
 
-/// If we haven't done so already, attempt to stop the system monitor thread
+// If we haven't done so already, attempt to stop the system monitor thread
 impl Drop for SystemMonitor {
     fn drop(&mut self) {
         if let Some(thread) = self.thread.take() {
@@ -71,14 +70,14 @@ impl Drop for SystemMonitor {
     }
 }
 
-/// The monitor runs in a thread, this is its data
+// The monitor runs in a thread, this is its data
 struct ThreadData {
     receiver: MonitorReceiver,
     executor: ExecutorControlObj,
     senders: Vec<CoreStatsSender>,
 }
 impl ThreadData {
-    /// launch the long running system monitor thread
+    // launch the long running system monitor thread
     fn spawn(receiver: MonitorReceiver, executor: ExecutorControlObj) -> Option<std::thread::JoinHandle<()>> {
         let thread = thread::spawn(move || {
             let mut res = Self {
@@ -91,7 +90,7 @@ impl ThreadData {
         Some(thread)
     }
 
-    /// the system monitor run loop. It doesn't do much.
+    // the system monitor run loop. It doesn't do much.
     fn run(&mut self) {
         log::info!("System Monitor is running");
         loop {
@@ -175,11 +174,13 @@ mod tests {
 
     struct Dummy {}
     impl ExecutorControl for Dummy {
-        /// notifies the executor that an executor is parked
+        // notifies the executor that an executor is parked
         fn parked_executor(&self, _id: usize) {}
-        /// notifies the executor that an executor completed and can be joined
+        // Wake parked threads
+        fn wake_parked_threads(&self) {}
+        // notifies the executor that an executor completed and can be joined
         fn joinable_executor(&self, _id: usize) {}
-        /// stop the executor
+        // stop the executor
         fn stop(&self) {}
     }
 

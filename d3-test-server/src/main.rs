@@ -24,7 +24,6 @@ mod components;
 mod coordinators;
 mod forwarder;
 
-///
 /// Currently, this is pretty thin. It consists of:
 ///     1) Reading configuration
 ///     2) Starting the server,
@@ -57,7 +56,6 @@ mod forwarder;
 /// In the end, what this all boils down to is that a given object
 /// implements an instruction set and gives its sender out to a
 /// source.
-///
 
 fn main() {
     // process the configuration file.
@@ -141,7 +139,7 @@ fn run_server(settings: &settings::Settings) {
 
     // if forwarder is configured, get it running
     if settings.features.contains(&settings::Feature::Forwarder) {
-        forwarder::run(&settings);
+        forwarder::run(settings);
     }
 
     let duration = std::time::Duration::from_secs(settings.test_server_duration * 60);
@@ -154,9 +152,7 @@ mod tests {
     use crossbeam::atomic::AtomicCell;
     use d3_core::machine_impl::*;
     use d3_derive::*;
-
-    #[test]
-    fn config() {}
+    use std::sync::Arc;
 
     #[test]
     fn alice() {
