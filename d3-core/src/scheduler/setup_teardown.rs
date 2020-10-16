@@ -141,20 +141,21 @@ pub fn stop_server() {
     if state != ServerState::Running {
         return;
     }
-    // ensure that server.borrows don't leak out. 
-    {
-    if let ServerField::Executor(executor) = &server.borrow().executor {
+    // borrow the server to stop the subsystems, drop it before the borrow_mut()
+    let borrow = server.borrow();
+    if let ServerField::Executor(executor) = &borrow.executor {
         executor.stop();
         // give the executor some time to stop threads.
         thread::sleep(Duration::from_millis(20));
     }
-    if let ServerField::Scheduler(scheduler) = &server.borrow().scheduler {
+    if let ServerField::Scheduler(scheduler) = &borrow.scheduler {
         scheduler.stop()
     }
-    if let ServerField::Monitor(monitor) = &server.borrow().monitor {
+    if let ServerField::Monitor(monitor) = &borrow.monitor {
         monitor.stop()
     }
-    }
+    drop(borrow);
+
     let mut s = server.borrow_mut();
     s.scheduler = ServerField::Uninitialized;
     s.executor = ServerField::Uninitialized;
