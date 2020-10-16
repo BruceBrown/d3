@@ -19,7 +19,7 @@ use super::*;
 struct AliceCoordinator {
     // A net_sender is injected, simplifying communincation with the network.
     net_sender: NetSender,
-    // The bind_addr is also injected 
+    // The bind_addr is also injected
     bind_addr: String,
 }
 

@@ -73,7 +73,9 @@ impl Server {
     }
     // wake executor threads
     pub fn wake_executor_threads() {
-        if server_state.load() != ServerState::Running { return }
+        if server_state.load() != ServerState::Running {
+            return;
+        }
         match &server.borrow().executor {
             ServerField::Executor(executor) => executor.wake_parked_threads(),
             _ => log::error!("Server not running, unable to wake executor threads."),
@@ -93,10 +95,19 @@ pub fn remove_core_stats_sender(sender: CoreStatsSender) { Server::remove_core_s
 /// that are connected to the collective.
 pub fn start_server() {
     log::info!("starting server");
+    let mut start = std::time::Instant::now();
     loop {
         let state = server_state.compare_and_swap(ServerState::Stopped, ServerState::Initializing);
-        if state == ServerState::Stopped { break }
+        if state == ServerState::Stopped {
+            break;
+        }
         thread::sleep(std::time::Duration::from_millis(50));
+        if start.elapsed() > std::time::Duration::from_secs(120) {
+            println!("force stopping server");
+            log::error!("force stopping server");
+            stop_server();
+            start = std::time::Instant::now();
+        }
     }
     log::info!("aquired server");
     if get_executor_count() == 0 {
@@ -126,7 +137,10 @@ pub fn start_server() {
 /// The stop_server function stops the server, releasing all resources.
 pub fn stop_server() {
     log::info!("stopping server");
-    server_state.store(ServerState::Stopping);
+    let state = server_state.compare_and_swap(ServerState::Running, ServerState::Stopping);
+    if state != ServerState::Running {
+        return;
+    }
 
     if let ServerField::Executor(executor) = &server.borrow().executor {
         executor.stop()
