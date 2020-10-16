@@ -1,5 +1,6 @@
 use self::{executor::*, overwatch::*, traits::*};
 use super::*;
+use std::thread;
 
 // A bit of an explanation is needed here. The server state and server struct live in
 // two statics: server_state and server. The server_state is an AtomicCell, which makes
@@ -72,6 +73,7 @@ impl Server {
     }
     // wake executor threads
     pub fn wake_executor_threads() {
+        if server_state.load() != ServerState::Running { return }
         match &server.borrow().executor {
             ServerField::Executor(executor) => executor.wake_parked_threads(),
             _ => log::error!("Server not running, unable to wake executor threads."),
@@ -91,6 +93,12 @@ pub fn remove_core_stats_sender(sender: CoreStatsSender) { Server::remove_core_s
 /// that are connected to the collective.
 pub fn start_server() {
     log::info!("starting server");
+    loop {
+        let state = server_state.compare_and_swap(ServerState::Stopped, ServerState::Initializing);
+        if state == ServerState::Stopped { break }
+        thread::sleep(std::time::Duration::from_millis(50));
+    }
+    log::info!("aquired server");
     if get_executor_count() == 0 {
         let num = num_cpus::get();
         // if we have enough, spare one for the sched + overhead
@@ -98,8 +106,6 @@ pub fn start_server() {
         set_executor_count(num);
         log::info!("setting executor count to {}", num);
     }
-    server_state.store(ServerState::Initializing);
-
     let monitor_factory = SystemMonitorFactory::new();
     let executor_factory = SystemExecutorFactory::new();
     let scheduler_factory = sched_factory::create_sched_factory();
