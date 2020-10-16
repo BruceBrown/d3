@@ -53,7 +53,7 @@ mod tests {
 
         // install a simple logger
         CombinedLogger::init(vec![TermLogger::new(
-            LevelFilter::Error,
+            LevelFilter::Debug,
             Config::default(),
             TerminalMode::Mixed,
         )])
@@ -104,6 +104,8 @@ mod tests {
         settings.coordinator.push(chat_map);
         settings.services.insert(Service::ChatServer);
         if let Ok(Some(coordinator)) = chat_coordinator::configure(&settings, components.as_slice()) {
+            // no longer need components
+            drop(components);
             // start the server
             coordinator.send(ComponentCmd::Start).unwrap();
             // for the next few moments you can connect to the server at 127.0.0.1:7000

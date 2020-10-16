@@ -85,6 +85,8 @@ pub fn stop_network() {
     s.network_control = NetworkField::Uninitialized;
     s.network_sender = NetworkField::Uninitialized;
     network_state.store(NetworkState::Stopped);
+    // give machines a chance to react to network shutdown
+    thread::sleep(Duration::from_millis(100));
 }
 
 /// The factory for the network
