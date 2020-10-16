@@ -31,4 +31,5 @@ jobs:
 
     - name: Test
       run: cargo test --workspace --tests --jobs 1
-      env: RUST_BACKTRACE=full
+      env:
+        RUST_BACKTRACE: full
