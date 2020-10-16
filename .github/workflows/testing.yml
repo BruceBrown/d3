@@ -30,4 +30,4 @@ jobs:
         override: true
 
     - name: Test
-      run: cargo test --workspace --doc
+      run: cargo test --workspace --tests
