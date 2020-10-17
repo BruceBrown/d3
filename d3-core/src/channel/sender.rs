@@ -1,6 +1,6 @@
 use self::connection::*;
 use super::*;
-use crossbeam::{SendError, SendTimeoutError, TrySendError};
+use crossbeam_channel::{SendError, SendTimeoutError, TrySendError};
 
 /// Wrap the crossbeam sender to allow the executor to handle a block.
 /// This requires that a send which would block, parks the send. It
@@ -15,7 +15,7 @@ use crossbeam::{SendError, SendTimeoutError, TrySendError};
 pub struct Sender<T: MachineImpl> {
     channel_id: usize,
     connection: ThreadSafeConnection,
-    pub sender: crossbeam::Sender<T>,
+    pub sender: crossbeam_channel::Sender<T>,
 }
 
 impl<T> Sender<T>
@@ -25,7 +25,7 @@ where
     pub fn get_id(&self) -> usize { self.channel_id }
     pub fn try_send(&self, msg: T) -> Result<(), TrySendError<T>> { self.sender.try_send(msg) }
 
-    pub fn sender(&self) -> crossbeam::Sender<T> { self.sender.clone() }
+    pub fn sender(&self) -> crossbeam_channel::Sender<T> { self.sender.clone() }
 
     pub fn send(&self, msg: T) -> Result<(), SendError<T>>
     where
@@ -41,7 +41,7 @@ where
                 log::debug!("parking sender {} with cmd {:#?}", self.channel_id, instruction);
                 match <T as MachineImpl>::park_sender(
                     self.channel_id,
-                    self.sender.clone() as crossbeam::Sender<<T as MachineImpl>::InstructionSet>,
+                    self.sender.clone() as crossbeam_channel::Sender<<T as MachineImpl>::InstructionSet>,
                     instruction,
                 ) {
                     Ok(()) => Ok(()),
@@ -102,7 +102,11 @@ where
 
 impl<T> Eq for Sender<T> where T: MachineImpl {}
 
-pub fn wrap_sender<T>(sender: crossbeam::Sender<T>, channel_id: usize, connection: ThreadSafeConnection) -> Sender<T>
+pub fn wrap_sender<T>(
+    sender: crossbeam_channel::Sender<T>,
+    channel_id: usize,
+    connection: ThreadSafeConnection,
+) -> Sender<T>
 where
     T: MachineImpl,
 {

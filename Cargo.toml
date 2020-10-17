@@ -13,8 +13,8 @@ repository = "https://github.com/BruceBrown/d3"
 homepage = "https://github.com/BruceBrown/d3"
 #documentation = "https://docs.rs/d3"
 description = "A framework for server development"
-keywords = ["non-blocking", "server"]
-categories = ["concurrency", "server", "framework"]
+keywords = ["non-blocking", "server", "framework"]
+categories = ["asynchronous", "concurrency"]
 exclude = ["/ci/*", "/bors.toml"]
 
 ## cargo clippy --all -- -W clippy::all -W clippy::pedantic -W clippy::restriction -W clippy::nursery -D warnings
@@ -46,8 +46,8 @@ name = "forwarder"
 harness = false
 
 [dependencies]
-crossbeam = "0.7"
-crossbeam-channel = "0.4"
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
 smart-default = "0.6"
 atomic_refcell = "0.1"
 log = "0.4"

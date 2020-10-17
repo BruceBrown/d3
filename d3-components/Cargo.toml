@@ -7,8 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-crossbeam = "0.7"
-crossbeam-channel = "0.4"
+crossbeam = "0.8"
+crossbeam-channel = "0.5"
 smart-default = "0.6"
 mio = {version = "0.7", features=["os-poll", "tcp"]}
 atomic_refcell = "0.1"

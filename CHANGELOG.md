@@ -1,6 +1,9 @@
 # d3 -- Revision ChangeLog
 **There hasn't been a release, stay tuned.**
 
+## Docs, Packaging and update
+Updated dependencies, bumped up to crossbeam 0.8 and crossbeam-channel 0.5.
+
 ## Docs, Inline Examples, Clippy and Fmt
 Quite a few changes however, its mostly formatting, adding and cleaning up documentation. The actual implementation is ony slightly changed.
 
