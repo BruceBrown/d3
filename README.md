@@ -87,7 +87,7 @@ If you need ideas for contribution, there are several ways to get started:
 * Issues and PRs labeled with
 [feedback wanted](https://github.com/brucebrown/d3/issues?utf8=%E2%9C%93&q=is%3Aopen+sort%3Aupdated-desc+label%3A%22feedback+wanted%22+)
 * Issues labeled with
-  [good first issue](https://github.com/crossbeam-rs/crossbeam/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc+label%3A%22good+first+issue%22)
+  [good first issue](https://github.com/brucebrown/d3/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc+label%3A%22good+first+issue%22)
   are relatively easy starter issues.
 
 ## Learning Resources
