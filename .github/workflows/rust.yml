@@ -1,6 +1,5 @@
 name: Rust
-# While CI takes care of the non-master branch. This takes
-# care of Master.
+
 on:
   push:
     branches: [ master ]
@@ -27,16 +26,6 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
         components: rustfmt, clippy
-
-    - uses: actions-rs/cargo@v1
-      with:
-        command: fmt
-        args: --all -- --check
-
-    - uses: actions-rs/cargo@v1
-      with:
-        command: clippy
-        args: --workspace -- -W clippy::all -W clippy::nursery -D warnings
 
     - uses: actions-rs/cargo@v1
       with:
