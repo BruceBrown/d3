@@ -9,6 +9,16 @@ https://www.rust-lang.org)
 
 Custom derive for automatically implementing the `MachineImpl` trait for an enum, tranforming it into a d3 instruction set. d3-derive is a companion to d3-core and d3-components. Combined, they form a framework for server development.
 
+## Usage
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+d3-derive = "0.1.0"
+```
+
+## Example
 ```rust
 #[macro_use]
 extern crate d3_derive;
