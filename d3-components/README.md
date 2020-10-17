@@ -1,4 +1,4 @@
-# Rust Core Runtime for D3 -- A Framework for Server Development
+# Rust Component Layer for D3 -- A Framework for Server Development
 
 [![Build Status](https://github.com/BruceBrown/d3/workflows/Rust/badge.svg)](
 https://github.com/brucebrown/d3/actions)
@@ -7,8 +7,9 @@ https://github.com/BruceBrown/d3#license)
 [![Rust 1.47+](https://img.shields.io/badge/rust-1.47+-color.svg)](
 https://www.rust-lang.org)
 
-The core runtime for the d3 framework. d3-core is a companion to d3-derive and d3-components.
-Combined, they form a framework for server development.
+The components layer provides an organization hierarchy for machines.
+It is based upon a Component/Coordinator/Connector model, and while not the only possible model, it is one I like.
+This layer is where the network is exposed. It is an adapter wrapping Mio.
 
 ## Usage
 
@@ -18,39 +19,40 @@ Add this to your `Cargo.toml`:
 [dependencies]
 d3-derive = "0.1.0"
 d3-core = "0.1.0"
+d3-components = "0.1.0"
 ```
 
-## Example
+
+## Example Listening on an address:port
 ```rust
 #[macro_use]
 extern crate d3_derive;
 
 use d3_core::machine_impl::*;
 use d3_core::executor;
-
-// A trivial instruction set
-#[derive(Debug, MachineImpl)]
-enum StateTable { Init, Start, Stop }
+use d3_components::network;
 
 // A trivial Alice
 pub struct Alice {}
 
 // Implement the Machine trait for Alice
-impl Machine<StateTable> for Alice {
+impl Machine<network::NetCmd> for Alice {
      fn receive(&self, cmd: StateTable) {
      }
 }
 
-// Start the scheduler and executor.
+// Start the scheduler and executor and network
 executor::start_server();
+network::start_network();
 
 // create the Machine from Alice, getting back a machine and Sender<StateTable>.
 let (alice, sender) = executor::connect(Alice{});
 
-// send a command to Alice
-// Alice's receive method will be invoked, with cmd of StateTable::Init.
-sender.send(StateTable::Init).expect("send failed");
+// send a command to the network asking for Alice to be notified if a connection
+// is received for 127.0.0.1:4000
+network::get_network_sender().send(NetCmd::BindListener("127.0.0.1:4000".to_string, sender)).expect("send failed");
 
-// Stop the scheduler and executor.
+// Stop the scheduler and executor and network
+network::start_network();
 executor::stop_server();
 ```
