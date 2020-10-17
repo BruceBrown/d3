@@ -8,7 +8,7 @@ use mio::event::Event;
 use mio::net::{TcpListener, TcpStream};
 use mio::{Events, Interest, Poll, Token, Waker};
 
-use crossbeam_channel::TryRecvError;
+use channel::TryRecvError;
 use ringbuf::RingBuffer;
 use slab::Slab;
 
@@ -191,7 +191,7 @@ impl NetworkWaker {
     fn run(&mut self) {
         // unfortuantely, we can't just wait for something to arrive, because we'll eat it.
         // So, setup a select for recv on the mio recevier and our receiver (for shutdown).
-        let mut sel = crossbeam_channel::Select::new();
+        let mut sel = crossbeam::channel::Select::new();
         sel.recv(&self.waker_receiver.receiver);
         sel.recv(&self.mio_receiver.receiver);
         log::info!("waker is starting");

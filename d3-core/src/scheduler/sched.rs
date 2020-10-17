@@ -2,7 +2,7 @@ use self::traits::*;
 use super::*;
 
 use self::setup_teardown::Server;
-use crossbeam_channel::{ReadyTimeoutError, RecvError, TryRecvError};
+use crossbeam::channel::{ReadyTimeoutError, RecvError, TryRecvError};
 
 type FnvIndexMap<K, V> = indexmap::IndexMap<K, V, fnv::FnvBuildHasher>;
 type SelIndexMap = FnvIndexMap<usize, usize>;
@@ -208,9 +208,9 @@ impl SchedulerThread {
         recv_map: &mut SelIndexMap,
         stats_timer: &mut SimpleEventTimer,
         stats: &mut SchedStats,
-    ) -> Vec<Result<SchedCmd, crossbeam_channel::RecvError>> {
+    ) -> Vec<Result<SchedCmd, crossbeam::channel::RecvError>> {
         let mut select = self.build_select_from_ready(recv_map, stats);
-        let mut results: Vec<Result<SchedCmd, crossbeam_channel::RecvError>> = Vec::with_capacity(20);
+        let mut results: Vec<Result<SchedCmd, crossbeam::channel::RecvError>> = Vec::with_capacity(20);
         // results contains dead machines, unfotunately, this layer can't remove them
         let mut running = self.is_running;
         // last index is used to monitor if we're running out of handles in the select
@@ -267,7 +267,7 @@ impl SchedulerThread {
     // receive it.
     fn selector(
         &self,
-        select: &mut crossbeam_channel::Select,
+        select: &mut crossbeam::channel::Select,
         recv_map: &mut SelIndexMap,
         stats_timer: &mut SimpleEventTimer,
         stats: &mut SchedStats,
@@ -276,7 +276,7 @@ impl SchedulerThread {
         let mut results = SchedResults::new();
         let h = fnv::FnvBuildHasher::default();
         let mut fast_recv_map = TimeStampedSelIndexMap::with_capacity_and_hasher(get_machine_count_estimate(), h);
-        let mut fast_select = crossbeam_channel::Select::new();
+        let mut fast_select = crossbeam::channel::Select::new();
         fast_select.recv(&self.receiver);
         let mut last_index = 0;
         let worker = crossbeam::deque::Worker::<SchedTask>::new_fifo();
@@ -392,9 +392,13 @@ impl SchedulerThread {
     // create a select list from machines that are ready to receive. As much
     // as we'd like to clean up dead machines, that would create a data race
     // between the scheduler and executor.
-    fn build_select_from_ready(&self, recv_map: &mut SelIndexMap, stats: &mut SchedStats) -> crossbeam_channel::Select {
+    fn build_select_from_ready(
+        &self,
+        recv_map: &mut SelIndexMap,
+        stats: &mut SchedStats,
+    ) -> crossbeam::channel::Select {
         let t = Instant::now();
-        let mut sel = crossbeam_channel::Select::new();
+        let mut sel = crossbeam::channel::Select::new();
         // the first sel index is always our receiver
         sel.recv(&self.receiver);
         recv_map.clear();
@@ -430,8 +434,8 @@ impl SchedulerThread {
 
     // get a ready index from 1 of 2 select lists
     fn do_select(
-        fast: &mut crossbeam_channel::Select,
-        slow: &mut crossbeam_channel::Select,
+        fast: &mut crossbeam::channel::Select,
+        slow: &mut crossbeam::channel::Select,
         duration: Duration,
     ) -> Result<(bool, usize), ReadyTimeoutError> {
         let start = Instant::now();
@@ -577,8 +581,8 @@ mod tests {
         // tweaks for more responsive testing
         set_selector_maintenance_duration(std::time::Duration::from_millis(20));
 
-        let (monitor_sender, _monitor_receiver) = crossbeam_channel::unbounded::<MonitorMessage>();
-        let (sched_sender, sched_receiver) = crossbeam_channel::unbounded::<SchedCmd>();
+        let (monitor_sender, _monitor_receiver) = crossbeam::channel::unbounded::<MonitorMessage>();
+        let (sched_sender, sched_receiver) = crossbeam::channel::unbounded::<SchedCmd>();
         let run_queue = Arc::new(deque::Injector::<Task>::new());
         let wait_queue = Arc::new(deque::Injector::<SchedTask>::new());
 

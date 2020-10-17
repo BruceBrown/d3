@@ -54,7 +54,7 @@ impl MachineAdapter {
     pub fn clone_state(&self) -> MachineState { self.state.clone() }
     // the remainder are implemented via a trait object
     #[inline]
-    pub fn sel_recv<'a>(&'a self, sel: &mut crossbeam_channel::Select<'a>) -> usize {
+    pub fn sel_recv<'a>(&'a self, sel: &mut crossbeam::channel::Select<'a>) -> usize {
         self.normalized_adapter.sel_recv(sel)
     }
     #[inline]
@@ -102,7 +102,7 @@ pub type MachineState = SharedProtectedObject<CollectiveState>;
 #[doc(hidden)]
 pub trait MachineDependentAdapter: Send + Sync + fmt::Debug {
     // Prepare a select.recv()
-    fn sel_recv<'a>(&'a self, sel: &mut crossbeam_channel::Select<'a>) -> usize;
+    fn sel_recv<'a>(&'a self, sel: &mut crossbeam::channel::Select<'a>) -> usize;
     // Complete the select.recv() with a try_recv
     fn try_recv_task(&self, machine: &ShareableMachine) -> Option<Task>;
     // Deliver the instruction into the machine.

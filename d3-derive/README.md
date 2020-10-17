@@ -7,7 +7,7 @@ https://github.com/BruceBrown/d3#license)
 [![Rust 1.47+](https://img.shields.io/badge/rust-1.47+-color.svg)](
 https://www.rust-lang.org)
 
-Custom derive for automatically implementing the `MachineImpl` trait for an enum, tranforming it into a D3 instruction set. d3-derive is a companion to d3-core and d3-components. Combined, they form a framework for server development.
+Custom derive for automatically implementing the `MachineImpl` trait for an enum, tranforming it into a d3 instruction set. d3-derive is a companion to d3-core and d3-components. Combined, they form a framework for server development.
 
 ```rust
 #[macro_use]

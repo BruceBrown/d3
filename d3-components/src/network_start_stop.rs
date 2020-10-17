@@ -77,7 +77,7 @@ pub fn start_network() {
 /// listeners and no further network activity is allowed.
 pub fn stop_network() {
     network_state.store(NetworkState::Stopping);
-    if let NetworkField::Network(network_control) = &network.borrow().network_control {
+    if let NetworkField::Network(network_control) = &(network.borrow()).network_control {
         network_control.stop()
     }
 

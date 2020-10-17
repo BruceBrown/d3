@@ -5,7 +5,7 @@ name = "d3"
 # - Update README.md
 # - Create "d3-X.Y.Z" git tag
 version = "0.1.0"
-authors = ["Bruce Brown <bruce_brown_1207@yahoo.com>"]
+authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -16,8 +16,6 @@ description = "A framework for server development"
 keywords = ["non-blocking", "server", "framework"]
 categories = ["asynchronous", "concurrency"]
 exclude = ["/ci/*", "/bors.toml"]
-
-## cargo clippy --all -- -W clippy::all -W clippy::pedantic -W clippy::restriction -W clippy::nursery -D warnings
 
 # Cargo default release + lto = true
 [profile.release]
@@ -47,7 +45,6 @@ harness = false
 
 [dependencies]
 crossbeam = "0.8"
-crossbeam-channel = "0.5"
 smart-default = "0.6"
 atomic_refcell = "0.1"
 log = "0.4"

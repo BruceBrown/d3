@@ -1,6 +1,6 @@
 use self::connection::*;
 use super::*;
-use crossbeam_channel::{RecvError, RecvTimeoutError, TryRecvError};
+use crossbeam::channel::{RecvError, RecvTimeoutError, TryRecvError};
 
 /// The Receiver is a wrapper aruond the Crossbeam receiver. It
 /// intentionally limits the surface of the receiver. Much of this
@@ -11,15 +11,15 @@ where
 {
     channel_id: usize,
     connection: ThreadSafeConnection,
-    pub receiver: crossbeam_channel::Receiver<T>,
+    pub receiver: crossbeam::channel::Receiver<T>,
 }
 
 impl<T> Receiver<T>
 where
     T: MachineImpl,
 {
-    pub fn clone_receiver(&self) -> crossbeam_channel::Receiver<T> { self.receiver.clone() }
-    pub fn receiver(&self) -> &crossbeam_channel::Receiver<T> { &self.receiver }
+    pub fn clone_receiver(&self) -> crossbeam::channel::Receiver<T> { self.receiver.clone() }
+    pub fn receiver(&self) -> &crossbeam::channel::Receiver<T> { &self.receiver }
 
     pub fn try_recv(&self) -> Result<T, TryRecvError> { self.receiver.try_recv() }
 
@@ -37,9 +37,9 @@ where
 
     pub fn capacity(&self) -> Option<usize> { self.receiver.capacity() }
 
-    pub fn iter(&self) -> crossbeam_channel::Iter<'_, T> { self.receiver.iter() }
+    pub fn iter(&self) -> crossbeam::channel::Iter<'_, T> { self.receiver.iter() }
 
-    pub fn try_iter(&self) -> crossbeam_channel::TryIter<'_, T> { self.receiver.try_iter() }
+    pub fn try_iter(&self) -> crossbeam::channel::TryIter<'_, T> { self.receiver.try_iter() }
 }
 
 impl<T> Clone for Receiver<T>
@@ -74,7 +74,7 @@ where
 impl<T> Eq for Receiver<T> where T: MachineImpl {}
 
 pub fn wrap_receiver<T>(
-    receiver: crossbeam_channel::Receiver<T>,
+    receiver: crossbeam::channel::Receiver<T>,
     channel_id: usize,
     connection: ThreadSafeConnection,
 ) -> Receiver<T>
