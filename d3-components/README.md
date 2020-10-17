@@ -2,8 +2,14 @@
 
 [![Build Status](https://github.com/BruceBrown/d3/workflows/Rust/badge.svg)](
 https://github.com/brucebrown/d3/actions)
+[![Test Status](https://github.com/BruceBrown/d3/workflows/Tests/badge.svg)](
+https://github.com/brucebrown/d3/actions)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](
 https://github.com/BruceBrown/d3#license)
+[![Cargo](https://img.shields.io/crates/v/d3-components.svg)](
+https://crates.io/crates/d3-components)
+[![Documentation](https://docs.rs/d3-components/badge.svg)](
+https://docs.rs/d3-components)
 [![Rust 1.47+](https://img.shields.io/badge/rust-1.47+-color.svg)](
 https://www.rust-lang.org)
 
@@ -48,9 +54,10 @@ network::start_network();
 // create the Machine from Alice, getting back a machine and Sender<StateTable>.
 let (alice, sender) = executor::connect(Alice{});
 
-// send a command to the network asking for Alice to be notified if a connection
-// is received for 127.0.0.1:4000
-network::get_network_sender().send(NetCmd::BindListener("127.0.0.1:4000".to_string, sender)).expect("send failed");
+// send a command to the network asking for Alice to 
+// be notified if a connection is received for 127.0.0.1:4000
+let cmd = NetCmd::BindListener("127.0.0.1:4000".to_string, sender);
+network::get_network_sender().send(cmd).expect("send failed");
 
 // Stop the scheduler and executor and network
 network::start_network();

@@ -1,5 +1,7 @@
 name: Rust
-
+#
+# run build and bench against stable, beta, and nightly
+#
 on:
   push:
     branches: [ master ]
