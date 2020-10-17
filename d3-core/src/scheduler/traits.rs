@@ -25,7 +25,7 @@ pub enum MonitorMessage {
     // Sent by the scheduler, providing periodic stats
     SchedStats(SchedStats),
 }
-pub type MonitorSender = crossbeam::Sender<MonitorMessage>;
+pub type MonitorSender = crossbeam_channel::Sender<MonitorMessage>;
 
 #[derive(Debug, Copy, Clone, MachineImpl)]
 pub enum CoreStatsMessage {
@@ -97,8 +97,8 @@ pub enum SchedCmd {
     // Executor stuff
     RebuildStealers,
 }
-pub type SchedSender = crossbeam::Sender<SchedCmd>;
-pub type SchedReceiver = crossbeam::Receiver<SchedCmd>;
+pub type SchedSender = crossbeam_channel::Sender<SchedCmd>;
+pub type SchedReceiver = crossbeam_channel::Receiver<SchedCmd>;
 
 pub trait SchedulerFactory {
     fn get_sender(&self) -> SchedSender;

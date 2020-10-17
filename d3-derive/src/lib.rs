@@ -57,7 +57,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             type Adapter = #adapter_ident;
             type SenderAdapter = #sender_adapter_ident;
             type InstructionSet = #name;
-            fn park_sender(channel_id: usize, sender: crossbeam::Sender<Self::InstructionSet>, instruction: Self::InstructionSet) -> Result<(),Self::InstructionSet> {
+            fn park_sender(channel_id: usize, sender: crossbeam_channel::Sender<Self::InstructionSet>, instruction: Self::InstructionSet) -> Result<(),Self::InstructionSet> {
                 //Err(instruction)
                 tls_executor_data.with(|t|{
                     let mut tls = t.borrow_mut();
@@ -117,13 +117,13 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         // be used less often.
         //
         impl MachineDependentAdapter for #adapter_ident {
-            fn sel_recv<'b>(&'b self, sel: &mut crossbeam::Select<'b>) -> usize {
+            fn sel_recv<'b>(&'b self, sel: &mut crossbeam_channel::Select<'b>) -> usize {
                 sel.recv(&self.receiver.receiver)
             }
             fn try_recv_task(&self, machine: &ShareableMachine) -> Option<Task> {
                 match self.receiver.receiver.try_recv() {
-                    Err(crossbeam::TryRecvError::Empty) => None,
-                    Err(crossbeam::TryRecvError::Disconnected) => {
+                    Err(crossbeam_channel::TryRecvError::Empty) => None,
+                    Err(crossbeam_channel::TryRecvError::Disconnected) => {
                         machine.state.set(CollectiveState::Disconnected);
                         let task_adapter = std::sync::Arc::clone(machine);
                         let task = Task{start: std::time::Instant::now(), machine: task_adapter };
@@ -163,8 +163,8 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                     if state.get() != CollectiveState::Running { break }
                     match self.receiver.receiver.try_recv() {
                         Ok(m) => cmd = m,
-                        Err(crossbeam::TryRecvError::Empty) => break,
-                        Err(crossbeam::TryRecvError::Disconnected) => {
+                        Err(crossbeam_channel::TryRecvError::Empty) => break,
+                        Err(crossbeam_channel::TryRecvError::Disconnected) => {
                             self.machine.disconnected();
                             state.set(CollectiveState::Dead);
                             break
@@ -178,7 +178,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             pub id: uuid::Uuid,
             pub key: usize,
             pub state: MachineState,
-            pub sender: crossbeam::Sender<#name>,
+            pub sender: crossbeam_channel::Sender<#name>,
             pub instruction: Option<#name>,
         }
         impl #sender_adapter_ident {
@@ -189,12 +189,12 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                         self.state.set(CollectiveState::Running);
                         Ok(())
                     },
-                    Err(crossbeam::TrySendError::Disconnected(inst)) => {
+                    Err(crossbeam_channel::TrySendError::Disconnected(inst)) => {
                         self.state.set(CollectiveState::Running);
                         self.instruction = Some(inst);
                         Err(TrySendError::Disconnected)
                     },
-                    Err(crossbeam::TrySendError::Full(inst)) => {
+                    Err(crossbeam_channel::TrySendError::Full(inst)) => {
                         self.instruction = Some(inst);
                         Err(TrySendError::Full)
                     },

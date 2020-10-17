@@ -243,7 +243,7 @@ impl ThreadData {
             // ignore rebuilds when not running
             Ok(SchedCmd::RebuildStealers) => (),
             Ok(_) => log::warn!("executor received unexpected message"),
-            Err(crossbeam::TryRecvError::Disconnected) => should_terminate = true,
+            Err(crossbeam_channel::TryRecvError::Disconnected) => should_terminate = true,
             Err(_) => (),
         };
         should_terminate
@@ -530,7 +530,7 @@ impl Executor {
     // create a new worker and executor
     fn new_worker(&self) -> (Worker, ThreadData) {
         let id = self.next_worker_id.fetch_add(1, Ordering::SeqCst);
-        let (sender, receiver) = crossbeam::bounded::<SchedCmd>(WORKER_MESSAGE_QUEUE_COUNT);
+        let (sender, receiver) = crossbeam_channel::bounded::<SchedCmd>(WORKER_MESSAGE_QUEUE_COUNT);
         let work = deque::Worker::<Task>::new_fifo();
         let stealer = Arc::new(work.stealer());
         let worker = Worker {

@@ -1,91 +1,117 @@
-# d3 -- Short for Data Drive Dispatch is a server framework
+# D3 -- A Framework for Server Development
 
-## Some historical perspective
-A few monts back I decided to learn Go, then Rust. When it came to learning Rust, I did a quick game, played with webassembly, and then decided to build a server to find out just how good Rust is for systems programming. Over the past 30 plus years I've worked on server development; newpaper servers, data base servers, email servers, meeting servers, etc. I've done the "how do we avoid deadlocks" game too many times. I've had to apply all kinds of ticks to squeeze the most out of server performance. Armed with all that knowledge -- I've earned these gray hairs -- this ismy take on a different, if not better approach to the problem.
+[![Build Status](https://github.com/BruceBrown/d3/workflows/Rust/badge.svg)](
+https://github.com/brucebrown/d3/actions)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](
+https://github.com/BruceBrown/d3#license)
+[![Rust 1.47+](https://img.shields.io/badge/rust-1.47+-color.svg)](
+https://www.rust-lang.org)
 
-What are those problems? I've already mentioned performance and deadlocks. There's life-cycle stuff -- some of the code being run today, I wrote 30 years ago. There are model changes which up at the worse times, often with something that in order to work has to wrap a bunch of somethings that were never intended to be wrapped.
 
-## What I've built
-The solution I've come up with is to have all objects communicate with each other, not through an instance, but through a messages queue. And while such systems have existed for decades (I've written more than one), this one has a slightly differnet twist, we're going to express all of the messages -- or instructions as enum variants. We're going to send them through a channel. We're going to monitor every receiver and execute them when a message is received. The entire system is asnchronous, with regards to objects. It is the data, passed as variants that provides any needed synchronization. And we're going to use rust and heavy rely upon the borrow checker to ensure we don't screw things up.
 
-I must say that I'm impressed by both the performance of Rust and the community supporting it. I could not have built what I did over the past two month without the support of the comunity or without some standout crates, such as Crossbeam, Mio, AtomicRefCell, and SmartDefault. It has enabled me to write this entire framework quickly and without the use of `Unsafe`. Not that its a bad thing, but it allowed me to focus on what I needed to implement rather that trying to figure out the bast/fastest/safest way to do something. I'll optimize later, as premature optimization is a young person's problem.
+This crate provides a framework for server development. It is especially
+well suited for those cases where the server employs a pipeline architecture.
+There are two core concepts, the machine, and the instruction set. Combined
+with a channel sender and receiver, you have all of the parts necessary for
+building a server. Strictly speaking, the d3 framework can be used for non-server
+projects, anywhere where you have concurrent, cooperative object instances.
 
-This is still a work in progress. However, its advanced enough that I'm publishing it.
-## Theory of Operation
-The central focus is centered around data driven dispatch. What I mean by that is having a set of objects which are driven by receiving data. There are several key elements:
-* Expressing an instruction set, in the form of variants.
-* Creating a set of machines that implement the instruction set.
-* Adding the machine to a collective
-* allowing access, by providing a sender to other machines.
-When a machine is added to the collective, it provides a reciver, and is given a sender. That sender can be cloned and given to other machines. When data becomes available, the machine is sceduled and execution begins.
+## The Instruction Set
+The Instruction Set starts with any kind of enum. It becomes an instruction set
+when `MachineImpl` is derived.
 
-One of the first tests I ran was creating a daisy chain of 4000 machines and sending 200 messages into the first, and getting 200 out of the last, this proved that the scheduler and executor are well behaved. Next, I had 1 machine fan 200 messages out to 4000 machines which then sent all there messages to a single machine. This exercised the parking of machines which became blocked on a full send queue -- a further test of the sceduler and executor.
+## The Machine
+The machine is an instance of any struct, implementing one or more instruction sets
+and connected to the collective. Machines, asynchronously, communicate with each
+other via the instruction sets they implement.
 
-There is a thin TCP layer, which, thanks to Mio, provides async I/O to the network. I'm planning on adding UDP in thenear future.
+## Example
+This example shows how easy it is to create an instruction set, create a machine
+and send an instruction to that machine.
+``` rust
+// A trivial instruction set
+#[derive(Debug, MachineImpl)]
+enum StateTable { Init, Start, Stop }
 
-Lastly, I added a framework on top of the raw machines, which implements a Coordinator, Component, Connection model. This is intended to provide ochestration and scalability.
+// A trivial Alice
+pub struct Alice {}
 
-A bit of polishing, in the form of logging and configuration was added, and after some cleanup, I'm publishing it. I've include an EchoServer and ChatServer, both of which I used to get a feeling for how easy or difficult it is to extend the server with services.
-
-## Example of an Instruction set
-A MachineImpl derive macro has been provided to support instruction sets. All you need to do is add it to an enum, like this:
-``` Rust
-/// These are the event types which are exchanged for testing
-#[allow(dead_code)]
-#[derive(Debug, MachineImpl, Clone, Eq, PartialEq)]
-pub enum TestMessage {
-    Test,
-    TestData(usize),
-    TestStruct(TestStruct),
-    TestCallback(Sender<TestMessage>, TestStruct),
-    AddSender(Sender<TestMessage>),
-    Notify(Sender<TestMessage>, usize),
+// Implement the Machine trait for Alice
+impl Machine<StateTable> for Alice {
+     fn receive(&self, cmd: StateTable) {
+     }
 }
 
-/// Test structure for callback and exchange
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub struct TestStruct {
-    pub from_id: usize,
-    pub received_by: usize,
-}
+// create the Machine from Alice, getting back a machine and Sender<StateTable>.
+let (alice, sender) = executor::connect(Alice{});
+
+// send a command to Alice
+// Alice's receive method will be invoked, with cmd of StateTable::Init.
+sender.send(StateTable::Init).expect("send failed");
 ```
 
-## example of a Machine
-Admittedly, it doesn't do much, `receive` is how instructions are supplied to the machine
-``` Rust
-struct Example {}
-impl Machine<TestMessage> for Example {
-fn disconnected(&self) {}
-fn receive(&self, cmd: TestMessage) {}
-}
+## Crates
+Several crates comprise the Framework.
+### d3-derive
+* [`MachineImpl`], a derive macro for tranforming an enum into a d3 instruction set.
+### d3-core
+* [`machine_impl`], a packaged namespace to be used alongside <quote>#[derive(MachineImpl)]</quote>.
+* [`executor`], a packaged namespace to facilitate interacting with the collective.
+### d3-components
+* [`components`], a packaged namespace for managing machines. It is modeled upon a component, coordinator, connector model.
+* [`network`], a TCP abstraction consumable by machines. It wraps Mio.
+
+## Usage
+
+Add this to your `Cargo.toml`:
+
+```toml
+[dependencies]
+d3 = "0.1.0"
 ```
 
-## example of adding a Machine to the Collective
-``` Rust
-/// Add it to the Collective
-let (_, sender) = executor::connect(Example{});
-/// send it a command
-sender.send(TestMessage::Test);
-```
-## example of a Machine that understands two different instruction sets
-``` Rust
-struct Example {}
-impl Machine<TestMessage> for Example {
-fn disconnected(&self) {}
-fn receive(&self, cmd: TestMessage) {}
-}
-impl Machine<StartStop> for Example {
-fn disconnected(&self) {}
-fn receive(&self, cmd: StartStop) {}
-}
+## Compatibility
 
-/// Add it to the Collective
-let (m, test_message_sender) = executor::connect::<_,TestMessage>(Example{});
-let start_stop_sender = executor::and_connect::<_,StarStop>(&m);
-```
-## Starting and Stopping the Server
-The server is started by calling `executor::start_server()` and stopped by calling `executor::stop_server()`. Once started, the network can be started by calling `network::start_network()` and stopped by calling `network::stop_network()`.
+d3 supports stable Rust releases going back at least six months,
+and every time the minimum supported Rust version is increased, a new minor
+version is released. Currently, the minimum supported Rust version is 1.47.
 
-I've provided an `EchoServer` and `ChatServer` as example services, along with a configuration that enables both simultaneously. I've also provided a `Forwarder`, which I use for performance testing.
+## Contributing
 
-That's it in a nut shell. At this point I'm looking for feed back, and am looking at performance.
+d3 welcomes contribution from everyone in the form of suggestions, bug reports,
+pull requests, and feedback. 💛
+
+If you need ideas for contribution, there are several ways to get started:
+* Found a bug or have a feature request?
+[Submit an issue](https://github.com/brucebrown/d3/issues/new)!
+* Issues and PRs labeled with
+[feedback wanted](https://github.com/brucebrown/d3/issues?utf8=%E2%9C%93&q=is%3Aopen+sort%3Aupdated-desc+label%3A%22feedback+wanted%22+)
+* Issues labeled with
+  [good first issue](https://github.com/crossbeam-rs/crossbeam/issues?q=is%3Aissue+is%3Aopen+sort%3Aupdated-desc+label%3A%22good+first+issue%22)
+  are relatively easy starter issues.
+
+## Learning Resources
+
+If you'd like to learn more read our [wiki](https://github.com/brucebrown/d3/wiki)
+
+## Conduct
+
+The d3 project adheres to the
+[Rust Code of Conduct](https://github.com/rust-lang/rust/blob/master/CODE_OF_CONDUCT.md).
+This describes the minimum behavior expected from all contributors.
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+
+## Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.

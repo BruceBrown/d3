@@ -36,7 +36,7 @@ pub trait MachineImpl: 'static + Send + Sync {
     // is returned.
     fn park_sender(
         channel_id: usize,
-        sender: crossbeam::Sender<Self::InstructionSet>,
+        sender: crossbeam_channel::Sender<Self::InstructionSet>,
         instruction: Self::InstructionSet,
     ) -> Result<(), Self::InstructionSet>;
 }

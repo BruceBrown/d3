@@ -95,8 +95,19 @@ mod tests {
             let f = Forwarder::default();
             let (t, s) = executor::connect(f);
             s.send(TestMessage::Test).unwrap();
-            thread::sleep(Duration::from_millis(40));
-            assert_eq!(t.lock().unwrap().get_and_clear_received_count(), 1);
+            // check if we've received it, but only for a second
+            let start = std::time::Instant::now();
+            loop {
+                thread::sleep(Duration::from_millis(10));
+                let count = t.lock().unwrap().get_and_clear_received_count();
+                if count == 1 {
+                    break;
+                }
+                if start.elapsed() > std::time::Duration::from_secs(1) {
+                    assert_eq!(true, false);
+                }
+            }
+            // we got the count of 1, now check that its cleared
             assert_eq!(t.lock().unwrap().get_and_clear_received_count(), 0);
         });
     }

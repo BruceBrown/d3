@@ -1,5 +1,7 @@
 name: Run Tests
-
+#
+# Run tests on Linux, Windows, and Mac
+# using nightly.
 on:
   push:
     branches: [ master ]

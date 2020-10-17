@@ -17,7 +17,7 @@ pub fn channel_with_capacity<T>(capacity: usize) -> (Sender<T>, Receiver<T>)
 where
     T: MachineImpl,
 {
-    let (s, r) = crossbeam::bounded(capacity);
+    let (s, r) = crossbeam_channel::bounded::<T>(capacity);
     wrap(s, r)
 }
 
@@ -27,18 +27,18 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>)
 where
     T: MachineImpl,
 {
-    let (s, r) = crossbeam::unbounded();
+    let (s, r) = crossbeam_channel::unbounded::<T>();
     wrap(s, r)
 }
 
-fn wrap<T>(sender: crossbeam::Sender<T>, receiver: crossbeam::Receiver<T>) -> (Sender<T>, Receiver<T>)
+fn wrap<T>(sender: crossbeam_channel::Sender<T>, receiver: crossbeam_channel::Receiver<T>) -> (Sender<T>, Receiver<T>)
 where
     T: MachineImpl,
 {
     let channel_id = CHANNEL_ID.fetch_add(1, Ordering::SeqCst);
     let (sc, rc) = Connection::new();
     (
-        wrap_sender(sender, channel_id, sc),
-        wrap_receiver(receiver, channel_id, rc),
+        wrap_sender::<T>(sender, channel_id, sc),
+        wrap_receiver::<T>(receiver, channel_id, rc),
     )
 }

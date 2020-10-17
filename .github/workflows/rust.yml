@@ -1,5 +1,6 @@
 name: Rust
-
+# While CI takes care of the non-master branch. This takes
+# care of Master.
 on:
   push:
     branches: [ master ]
