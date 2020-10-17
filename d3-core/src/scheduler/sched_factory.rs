@@ -16,7 +16,7 @@ struct Factory {
 impl Factory {
     /// create the factory
     pub fn new() -> Self {
-        let (sender, receiver) = crossbeam_channel::unbounded::<SchedCmd>();
+        let (sender, receiver) = crossbeam::channel::unbounded::<SchedCmd>();
         Self { sender, receiver }
     }
     /// get the sender for the scheduler

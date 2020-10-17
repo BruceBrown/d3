@@ -32,13 +32,13 @@ pub enum ComponentCmd {
 /// # use std::error::Error;
 /// # use std::sync::Arc;
 /// # use crossbeam;
-/// # use crossbeam_channel::{Sender,Receiver};
+/// # use crossbeam::channel::{Sender,Receiver};
 /// # type AnySender = Arc<dyn std::any::Any + Send + Sync>;
 /// # enum ComponentCmd { Start, Stop }
 /// # type ComponentSender = Sender<ComponentCmd>;
 /// # enum StateTable { Start, Stop }
-/// # fn channel<T>() -> (crossbeam_channel::Sender<T>, crossbeam_channel::Receiver<T>) {
-/// #   crossbeam_channel::unbounded()
+/// # fn channel<T>() -> (crossbeam::channel::Sender<T>, crossbeam::channel::Receiver<T>) {
+/// #   crossbeam::channel::unbounded()
 /// # }
 /// # fn main() -> Result<(), Box<dyn Error>> {
 /// #

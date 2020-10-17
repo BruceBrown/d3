@@ -1,7 +1,7 @@
 use self::traits::*;
 use super::*;
 
-type MonitorReceiver = crossbeam_channel::Receiver<MonitorMessage>;
+type MonitorReceiver = crossbeam::channel::Receiver<MonitorMessage>;
 
 // The factory for creating the system monitor.
 pub struct SystemMonitorFactory {
@@ -11,7 +11,7 @@ pub struct SystemMonitorFactory {
 impl SystemMonitorFactory {
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> MonitorFactoryObj {
-        let (sender, receiver) = crossbeam_channel::bounded::<MonitorMessage>(MONITOR_QUEUE_MAX);
+        let (sender, receiver) = crossbeam::channel::bounded::<MonitorMessage>(MONITOR_QUEUE_MAX);
         Arc::new(Self { sender, receiver })
     }
 }
@@ -141,7 +141,7 @@ impl ThreadData {
     }
 
     fn try_fwd(&mut self, msg: CoreStatsMessage) {
-        use crossbeam_channel::TrySendError;
+        use crossbeam::channel::TrySendError;
         match self.senders.len() {
             0 => (),
             1 => {

@@ -12,10 +12,11 @@ readme = "README.md"
 repository = "https://github.com/BruceBrown/d3"
 homepage = "https://github.com/BruceBrown/d3"
 #documentation = "https://docs.rs/d3"
-description = "A framework for server development"
+description = "A framework for server development -- the derive macro"
 keywords = ["non-blocking", "server", "framework"]
 categories = ["asynchronous", "concurrency"]
 exclude = ["/ci/*", "/bors.toml"]
+
 
 [lib]
 proc-macro = true

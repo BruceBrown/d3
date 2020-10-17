@@ -30,7 +30,7 @@ use std::time::Duration;
 
 use atomic_refcell::AtomicRefCell;
 use crossbeam::atomic::AtomicCell;
-
+use crossbeam::channel;
 #[allow(unused_imports)] use d3_core::executor::*;
 use d3_core::machine_impl::*;
 use d3_core::send_cmd;
