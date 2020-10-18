@@ -26,6 +26,6 @@ atomic_refcell = "0.1"
 log = "0.4"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 
-d3-core = {version = "0.1.0", path = "../d3-core"}
-d3-derive = {version = "0.1.0", path = "../d3-derive"}
+d3-core = {version = "0.1.1", path = "../d3-core"}
+d3-derive = {version = "0.1.1", path = "../d3-derive"}
 d3-components = {version = "0.1.0", path = "../d3-components"}

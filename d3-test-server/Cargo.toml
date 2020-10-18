@@ -27,7 +27,7 @@ log = "0.4"
 simplelog = "0.8"
 rand = "0.7"
 
-d3-core = {version = "0.1.0", path = "../d3-core"}
+d3-core = {version = "0.1.1", path = "../d3-core"}
 d3-components =  {version = "0.1.0", path = "../d3-components"}
 echo-service = {version = "0.1.0", path = "../echo-service"}
 chat-service = {version = "0.1.0", path = "../chat-service"}
@@ -41,4 +41,4 @@ alice-service = {version = "0.1.0", path = "../examples/alice-service"}
 [dev-dependencies]
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 
-d3-derive = {version = "0.1.0", path = "../d3-derive"}
+d3-derive = {version = "0.1.1", path = "../d3-derive"}

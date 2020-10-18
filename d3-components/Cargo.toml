@@ -32,8 +32,8 @@ serde_derive = "1.0"
 config = "0.10"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 
-d3-core = {version = "0.1.0", path = "../d3-core"}
-d3-derive = {version = "0.1.0", path = "../d3-derive"}
+d3-core = {version = "0.1.1", path = "../d3-core"}
+d3-derive = {version = "0.1.1", path = "../d3-derive"}
 
 [dev-dependencies]
 simplelog = "0.8"

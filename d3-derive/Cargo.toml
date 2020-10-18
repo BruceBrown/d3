@@ -4,7 +4,7 @@ name = "d3-derive"
 # - Update CHANGELOG.md
 # - Update README.md
 # - Create "d3-X.Y.Z" git tag
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
