@@ -16,6 +16,7 @@ https://www.rust-lang.org)
 
 This crate provides a framework for server development. It is especially
 well suited for those cases where the server employs a pipeline architecture.
+
 There are two core concepts, the machine, and the instruction set. Combined
 with a channel sender and receiver, you have all of the parts necessary for
 building a server. Strictly speaking, the d3 framework can be used for non-server
@@ -56,15 +57,15 @@ sender.send(StateTable::Init).expect("send failed");
 ```
 
 ## Crates
-Several crates comprise the Framework.
+The main `d3` crate just [re-exports](src/lib.rs) tools from smaller subcrates:
 ### d3-derive
-* [`MachineImpl`], a derive macro for tranforming an enum into a d3 instruction set.
+* [`MachineImpl`](d3-derive), a derive macro for tranforming an enum into a d3 instruction set.
 ### d3-core
-* [`machine_impl`], a packaged namespace to be used alongside <quote>#[derive(MachineImpl)]</quote>.
-* [`executor`], a packaged namespace to facilitate interacting with the collective.
+* [`machine_impl](d3-core), a packaged namespace to be used alongside <quote>#[derive(MachineImpl)]</quote>.
+* [`executor`](d3-core), a packaged namespace to facilitate interacting with the collective.
 ### d3-components
-* [`components`], a packaged namespace for managing machines. It is modeled upon a component, coordinator, connector model.
-* [`network`], a TCP abstraction consumable by machines. It wraps Mio.
+* [`components`](d3-components), a packaged namespace for managing machines. It is modeled upon a component, coordinator, connector model.
+* [`network`](d3-components), a TCP abstraction consumable by machines. It wraps Mio.
 
 ## Usage
 

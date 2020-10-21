@@ -4,9 +4,22 @@ use crossbeam::atomic::AtomicCell;
 use std::net::SocketAddr;
 use uuid::Uuid;
 
-use d3_components::settings::*;
-use d3_components::{components::*, network::*};
-use d3_core::executor;
-use d3_core::machine_impl::*;
+// Maybe turn this into a prelude?
+#[allow(unused_imports)]
+use d3::{
+    self,
+    components::{
+        self,
+        network::*,
+        settings::{self, Coordinator, CoordinatorVariant, Service, Settings, SimpleConfig},
+        *,
+    },
+    core::{
+        executor::{self},
+        machine_impl::*,
+        *,
+    },
+    d3_derive::*,
+};
 
 pub mod alice;

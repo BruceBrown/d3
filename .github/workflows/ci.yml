@@ -1,12 +1,12 @@
+name: CI
 #
-# CI for a branch change other than Master.
-# This verifies building for stable, beta, nightly, and 1.47.0, the MSRV
+# CI for a branch change, other than master.
+# This verifies build, test, fmt, and clippy w/ nightly
 #
 on:
   push:
-    branches: [ master ]
-
-name: Continuous integration
+    branches-ignore:
+      - master
 
 jobs:
   ci:

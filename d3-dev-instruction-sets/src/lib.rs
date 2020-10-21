@@ -8,9 +8,9 @@ extern crate smart_default;
 // this should become a prelude
 #[allow(unused_imports)] use std::sync::{Arc, Mutex};
 
-use d3_core::machine_impl::*;
+use d3::core::machine_impl::*;
 
-#[allow(unused_imports)] use d3_derive::*;
+#[allow(unused_imports)] use d3::d3_derive::*;
 
 mod something;
 pub use something::Something;

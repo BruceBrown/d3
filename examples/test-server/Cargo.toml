@@ -1,5 +1,5 @@
 [package]
-name = "alice-service"
+name = "test-server"
 # When publishing a new version:
 # - Update CHANGELOG.md
 # - Update README.md
@@ -9,10 +9,10 @@ authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/BruceBrown/d3/tree/master/examples/alice-service"
+repository = "https://github.com/BruceBrown/d3/tree/master/examples/test-server"
 homepage = "https://github.com/BruceBrown/d3"
 #documentation = "https://docs.rs/d3"
-description = "A framework for server development -- example web service"
+description = "A framework for server development -- example test server"
 keywords = ["non-blocking", "server", "framework"]
 categories = ["asynchronous", "concurrency"]
 exclude = ["/ci/*", "/bors.toml"]
@@ -24,6 +24,15 @@ crossbeam = "0.8"
 smart-default = "0.6"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 log = "0.4"
+simplelog = "0.8"
 httparse = "1.3.4"
 
-d3 = {version = "0.1.0", path = "../../../d3"}
+d3 = {version = "0.1.0", path = "../../."}
+
+d3-dev-instruction-sets = {path = "../../d3-dev-instruction-sets"}
+d3-test-drivers = {path = "../../d3-test-drivers"}
+
+alice-service = {path = "../../examples/alice-service"}
+chat-service = {path = "../../examples/chat-service"}
+echo-service = {path = "../../examples/echo-service"}
+monitor-service = {path = "../../examples/monitor-service"}

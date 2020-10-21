@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use super::*;
 
-/// This is the entry point for configuring the producer component. We get two sets of settings,
+/// This is the entry point for configuring the consumer component. We get two sets of settings,
 /// our specific and the full set. Hopefully we'll not need to dig into the full set
 /// In our case, there's very little to do.
 pub fn configure(
@@ -9,7 +9,7 @@ pub fn configure(
     _settings: &settings::Settings,
 ) -> Result<Option<ComponentSender>, ComponentError> {
     if config.enabled {
-        let (_, sender) = executor::connect(ProducerComponent::new());
+        let (_, sender) = executor::connect(ConsumerComponent::new());
         Ok(Some(sender))
     } else {
         Ok(None)
@@ -17,30 +17,31 @@ pub fn configure(
 }
 
 #[derive(Debug, Default)]
-struct ProducerComponent {}
-impl ProducerComponent {
+struct ConsumerComponent {}
+
+impl ConsumerComponent {
     pub const fn new() -> Self { Self {} }
     fn create_instance(&self, conn_id: u128, any_sender: AnySender) {
         if let Ok(session_sender) = Arc::clone(&any_sender).downcast::<Sender<EchoCmd>>() {
             let (_instance, sender) = executor::connect(EchoInstance::new(conn_id));
             send_cmd(
                 &session_sender,
-                EchoCmd::Instance(conn_id, sender, settings::Component::EchoProducer),
+                EchoCmd::Instance(conn_id, sender, "EchoConsumer".to_string()),
             );
         } else {
-            log::warn!("echo producer component received an unknown sender")
+            log::warn!("echo consumer component received an unknown sender")
         }
     }
 }
 
-impl Machine<ComponentCmd> for ProducerComponent {
+impl Machine<ComponentCmd> for ConsumerComponent {
     fn disconnected(&self) {
-        log::info!("echo producer component disconnected");
+        log::info!("echo consumer component disconnected");
     }
 
     fn receive(&self, cmd: ComponentCmd) {
         match cmd {
-            ComponentCmd::NewSession(conn_id, service, any_sender) if service == Service::EchoServer => {
+            ComponentCmd::NewSession(conn_id, service, any_sender) if service == "EchoServer" => {
                 self.create_instance(conn_id, any_sender)
             },
             ComponentCmd::Start => (),
@@ -80,14 +81,14 @@ impl EchoInstance {
 
 impl Machine<EchoCmd> for EchoInstance {
     fn disconnected(&self) {
-        log::info!("echo producer disconnected");
+        log::info!("echo consumer disconnected");
     }
 
     fn receive(&self, cmd: EchoCmd) {
         match cmd {
             EchoCmd::AddSink(_, sender) => self.add_sink(sender),
             EchoCmd::NewData(conn_id, ref bytes) => self.new_data(conn_id, bytes),
-            _ => log::warn!("echo producer received an echo cmd it doesn't handle: {:#?}", cmd),
+            _ => log::warn!("echo consumer received an echo cmd it doesn't handle: {:#?}", cmd),
         }
     }
 }

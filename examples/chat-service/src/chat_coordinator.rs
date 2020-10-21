@@ -43,9 +43,7 @@
 //! While this could have been written simpler, using a single component, it is an objective to illustrate
 //! how components interact and are wired together.
 use super::*;
-use components::{ComponentError, ComponentInfo, ComponentSender};
-use network::{get_network_sender, NetCmd, NetConnId, NetSender};
-use settings::{Coordinator, CoordinatorVariant, Settings};
+
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
@@ -55,13 +53,13 @@ use std::net::SocketAddr;
 /// out and just have a single room.
 pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Option<ComponentSender>, ComponentError> {
     // ensure our service is configure in services
-    if !settings.services.contains(&Service::ChatServer) {
+    if !settings.services.contains("ChatServer") {
         log::debug!("chat service is not configured");
         return Ok(None);
     }
     // find ourself in the list
     for c in &settings.coordinator {
-        if let Some(v) = c.get(&Coordinator::ChatCoordinator) {
+        if let Some(v) = c.get("ChatCoordinator") {
             let coordinator = match v {
                 CoordinatorVariant::SimpleTcpConfig { tcp_address, kv } if kv.is_some() => {
                     let mutable = Mutex::new(MutableCoordinatorData {
@@ -154,7 +152,7 @@ impl MutableCoordinatorData {
         components.iter().for_each(|c| {
             send_cmd(
                 c.sender(),
-                ComponentCmd::NewSession(conn_uuid, Service::ChatServer, Arc::new(sender.clone())),
+                ComponentCmd::NewSession(conn_uuid, "ChatServer".to_string(), Arc::new(sender.clone())),
             )
         });
     }
@@ -387,9 +385,13 @@ impl Machine<ChatCmd> for ChatInstance {
     fn receive(&self, cmd: ChatCmd) {
         // log::trace!("echo instance {:#?}", &cmd);
         match cmd {
-            ChatCmd::Instance(conn_id, sender, settings::Component::ChatConsumer) => self.add_consumer(conn_id, sender),
+            ChatCmd::Instance(conn_id, sender, component) if component == "ChatConsumer" => {
+                self.add_consumer(conn_id, sender)
+            },
             ChatCmd::RemoveSink(conn_id) => self.remove_sink(conn_id),
-            ChatCmd::Instance(conn_id, sender, settings::Component::ChatProducer) => self.add_producer(conn_id, sender),
+            ChatCmd::Instance(conn_id, sender, component) if component == "ChatProducer" => {
+                self.add_producer(conn_id, sender)
+            },
             ChatCmd::NewData(conn_id, bytes) => self.new_data(conn_id, bytes),
             _ => (),
         }

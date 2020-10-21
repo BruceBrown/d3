@@ -1,11 +1,23 @@
-use d3_components::settings::*;
-use d3_components::{components::*, network::*};
-use d3_core::machine_impl::*;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use d3_core::executor;
-use d3_core::executor::stats::*;
+// Maybe turn this into a prelude?
+#[allow(unused_imports)]
+use d3::{
+    self,
+    components::{
+        self,
+        network::*,
+        settings::{self, Coordinator, CoordinatorVariant, Service, Settings, SimpleConfig},
+        *,
+    },
+    core::{
+        executor::{self, stats::*, *},
+        machine_impl::*,
+        *,
+    },
+    d3_derive::*,
+};
 pub mod monitor;
 
 #[cfg(test)]

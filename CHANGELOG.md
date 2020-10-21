@@ -1,5 +1,15 @@
 # d3 -- Revision ChangeLog
-**There hasn't been a release, stay tuned.**
+Enhanced examples. Re-arranged the folders. Chanced settings values from enum to string.
+
+17-Oct-2020
+problems with README, links, and badges... This forced a new release.
+0.1.1 -- d3-derive released.
+0.1.1 -- d3-core released.
+0.1.0 -- d3-components released.
+
+0.1.0 -- d3-derive released.
+0.1.0 -- d3-core released.
+
 
 ## Docs, Packaging and update
 Updated dependencies, bumped up to crossbeam 0.8 and crossbeam-channel 0.5.

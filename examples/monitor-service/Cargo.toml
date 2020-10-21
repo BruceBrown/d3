@@ -21,6 +21,4 @@ exclude = ["/ci/*", "/bors.toml"]
 [dependencies]
 
 log = "0.4"
-d3-core = {version = "0.1.1", path = "../../d3-core"}
-d3-components =  {version = "0.1.0", path = "../../d3-components"}
-d3-dev-instruction-sets = {version = "0.1.0", path = "../../d3-dev-instruction-sets"}
+d3 = {version = "0.1.0", path = "../../../d3"}

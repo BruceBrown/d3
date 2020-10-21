@@ -22,14 +22,23 @@ use std::sync::{Arc, Mutex};
 
 use uuid::{self};
 
-#[allow(unused_imports)] use d3_core::executor::{self};
-use d3_core::machine_impl::*;
-use d3_core::send_cmd;
-use d3_derive::*;
-
-use d3_components::components::{AnySender, ComponentCmd, ComponentError, ComponentSender};
-use d3_components::settings::{self, Service, SimpleConfig};
-use d3_components::*;
+// Maybe turn this into a prelude?
+#[allow(unused_imports)]
+use d3::{
+    self,
+    components::{
+        self,
+        network::{self, *},
+        settings::{self, Component, Coordinator, CoordinatorVariant, Service, Settings, SimpleConfig},
+        *,
+    },
+    core::{
+        executor::{self},
+        machine_impl::*,
+        *,
+    },
+    d3_derive::*,
+};
 
 mod chat_instruction_set;
 use chat_instruction_set::{ChatCmd, ChatSender, Data};
@@ -41,8 +50,6 @@ pub mod chat_producer;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use d3_components::{components::*, settings::*};
-    use d3_core::executor;
     use simplelog::*;
     use std::collections::HashMap;
 
@@ -74,7 +81,7 @@ mod tests {
             ..SimpleConfig::default()
         };
         if let Ok(Some(sender)) = chat_consumer::configure(config, &settings) {
-            components.push(ComponentInfo::new(Component::ChatConsumer, sender));
+            components.push(ComponentInfo::new("ChatConsumer".to_string(), sender));
         } else {
             assert_eq!(true, false);
         }
@@ -85,7 +92,7 @@ mod tests {
             ..SimpleConfig::default()
         };
         if let Ok(Some(sender)) = chat_producer::configure(config, &settings) {
-            components.push(ComponentInfo::new(Component::ChatProducer, sender));
+            components.push(ComponentInfo::new("ChatProducer".to_string(), sender));
         } else {
             assert_eq!(true, false);
         }
@@ -95,14 +102,14 @@ mod tests {
         kv.insert("name_prompt".to_string(), "Welcome, ur name?".to_string());
         let mut chat_map: HashMap<settings::Coordinator, CoordinatorVariant> = HashMap::new();
         chat_map.insert(
-            Coordinator::ChatCoordinator,
+            "ChatCoordinator".to_string(),
             CoordinatorVariant::SimpleTcpConfig {
                 tcp_address: "127.0.0.1:7000".to_string(),
                 kv: Some(kv),
             },
         );
         settings.coordinator.push(chat_map);
-        settings.services.insert(Service::ChatServer);
+        settings.services.insert("ChatServer".to_string());
         if let Ok(Some(coordinator)) = chat_coordinator::configure(&settings, components.as_slice()) {
             // no longer need components
             drop(components);

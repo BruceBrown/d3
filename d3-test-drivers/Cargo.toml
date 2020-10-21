@@ -9,7 +9,7 @@ authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/BruceBrown/d3/d3-components"
+repository = "https://github.com/BruceBrown/d3/tree/master/d3-test-drivers"
 homepage = "https://github.com/BruceBrown/d3"
 #documentation = "https://docs.rs/d3"
 description = "A framework for server development -- the test drivers"
@@ -24,6 +24,6 @@ smart-default = "0.6"
 rand = "0.7"
 log = "0.4"
 
-d3-core = {version = "0.1.1", path = "../d3-core"}
+d3 = {version = "0.1.0", path = "../."}
 d3-dev-instruction-sets = {version = "0.1.0", path = "../d3-dev-instruction-sets"}
 

@@ -1,19 +1,20 @@
 use super::*;
 use components::{ComponentError, ComponentInfo, ComponentSender};
 use network::{get_network_sender, NetCmd, NetConnId, NetSender};
-use settings::{Coordinator, CoordinatorVariant, Settings};
+use settings::{CoordinatorVariant, Settings};
 use std::net::SocketAddr;
 
 // maybe a trait would be better
+#[allow(dead_code)]
 pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Option<ComponentSender>, ComponentError> {
     // ensure our service is configure in services
-    if !settings.services.contains(&Service::EchoServer) {
+    if !settings.services.contains("EchoServer") {
         log::debug!("echo service is not configured");
         return Ok(None);
     }
     // find ourself in the list
     for c in &settings.coordinator {
-        if let Some(value) = c.get(&Coordinator::EchoCoordinator) {
+        if let Some(value) = c.get("EchoCoordinator") {
             let maybe_coordinator = match value {
                 CoordinatorVariant::SimpleTcpConfig { tcp_address, .. } => Some(EchoCoordinator {
                     net_sender: get_network_sender(),
@@ -70,7 +71,7 @@ impl EchoCoordinator {
         self.components.iter().for_each(|c| {
             send_cmd(
                 c.sender(),
-                ComponentCmd::NewSession(conn_uuid, Service::EchoServer, Arc::new(sender.clone())),
+                ComponentCmd::NewSession(conn_uuid, "EchoServer".to_string(), Arc::new(sender.clone())),
             )
         });
         // tell the network where to send connection control and data
@@ -207,8 +208,8 @@ impl Machine<EchoCmd> for EchoInstance {
     fn receive(&self, cmd: EchoCmd) {
         // log::trace!("echo instance {:#?}", &cmd);
         match cmd {
-            EchoCmd::Instance(_conn_id, sender, settings::Component::EchoConsumer) => self.add_consumer(sender),
-            EchoCmd::Instance(_conn_id, sender, settings::Component::EchoProducer) => self.add_producer(sender),
+            EchoCmd::Instance(_conn_id, sender, component) if component == "EchoConsumer" => self.add_consumer(sender),
+            EchoCmd::Instance(_conn_id, sender, component) if component == "EchoProducer" => self.add_producer(sender),
             EchoCmd::NewData(conn_id, bytes) => self.new_data(conn_id, bytes),
             _ => (),
         }
@@ -228,11 +229,4 @@ impl Machine<NetCmd> for EchoInstance {
             _ => log::warn!("echo router received unexpected network command"),
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-
-    #[test]
-    fn test() {}
 }

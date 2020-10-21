@@ -6,15 +6,26 @@ extern crate smart_default;
 #[macro_use]
 extern crate log;
 extern crate simplelog;
-
 use simplelog::*;
 
 use std::str::FromStr;
 
-use d3_components::components::ComponentCmd;
-use d3_components::network;
-use d3_components::settings;
-use d3_core::executor;
+// Maybe turn this into a prelude?
+#[allow(unused_imports)]
+use d3::{
+    self,
+    components::{
+        network::{self, *},
+        settings::{self, Coordinator, CoordinatorVariant, Service, Settings, SimpleConfig},
+        *,
+    },
+    core::{
+        executor::{self, stats::*, *},
+        machine_impl::*,
+        *,
+    },
+    d3_derive::*,
+};
 
 use d3_test_drivers::chaos_monkey::ChaosMonkeyDriver;
 use d3_test_drivers::daisy_chain::DaisyChainDriver;
@@ -138,7 +149,7 @@ fn run_server(settings: &settings::Settings) {
     });
 
     // if forwarder is configured, get it running
-    if settings.features.contains(&settings::Feature::Forwarder) {
+    if settings.features.contains("Forwarder") {
         forwarder::run(settings);
     }
 
@@ -150,8 +161,6 @@ fn run_server(settings: &settings::Settings) {
 mod tests {
     use super::*;
     use crossbeam::atomic::AtomicCell;
-    use d3_core::machine_impl::*;
-    use d3_derive::*;
     use std::sync::Arc;
 
     #[test]

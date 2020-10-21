@@ -25,19 +25,14 @@ pub struct Settings {
 
 /// This names all of the feature toggles
 #[derive(Debug, Deserialize, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum Feature {
+pub enum _Feature {
     EchoServer,
     Forwarder,
 }
-
-/// This names all of the services
-#[derive(Debug, Deserialize, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum Service {
-    EchoServer,
-    ChatServer,
-    MonitorService,
-    AliceService,
-}
+pub type Feature = String;
+pub type Service = String;
+pub type Coordinator = String;
+pub type Component = String;
 
 /// Some tuning params, these might be better as fields
 #[derive(Debug, Deserialize)]
@@ -45,15 +40,6 @@ pub struct Executor {
     pub executors: Option<usize>,
     pub queue_size: Option<usize>,
     pub time_slice: Option<usize>,
-}
-
-/// This names all of the coordinators.
-#[derive(Debug, Deserialize, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum Coordinator {
-    EchoCoordinator,
-    ChatCoordinator,
-    MonitorCoordinator,
-    AliceCoordinator,
 }
 
 /// All of the coordinator config variants
@@ -64,15 +50,6 @@ pub enum CoordinatorVariant {
         tcp_address: String,
         kv: Option<HashMap<String, String>>,
     },
-}
-
-/// This names all of the components.
-#[derive(Debug, Deserialize, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum Component {
-    EchoConsumer,
-    EchoProducer,
-    ChatConsumer,
-    ChatProducer,
 }
 
 /// All of the component config variants

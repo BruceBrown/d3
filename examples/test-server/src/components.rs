@@ -1,7 +1,8 @@
 use super::*;
-use d3_components::components::*;
-use d3_components::settings::SimpleConfig;
-use echo_service::component;
+
+use chat_service::*;
+use d3::components::settings::SimpleConfig;
+use echo_service::*;
 
 /// This is the entry point for getting all the components configured and active.
 /// It lives in main, but may move. It needs to be very high in the stack as it
@@ -15,11 +16,11 @@ pub fn configure(settings: &settings::Settings) -> Result<Vec<ComponentInfo>, Co
         for (k, v) in c {
             let config = SimpleConfig::from(v);
             if config.enabled {
-                let result = match k {
-                    settings::Component::EchoConsumer => component::echo_consumer::configure(config, settings),
-                    settings::Component::EchoProducer => component::echo_producer::configure(config, settings),
-                    settings::Component::ChatConsumer => chat_service::chat_consumer::configure(config, settings),
-                    settings::Component::ChatProducer => chat_service::chat_producer::configure(config, settings),
+                let result = match k.as_str() {
+                    "EchoConsumer" => echo_consumer::configure(config, settings),
+                    "EchoProducer" => echo_producer::configure(config, settings),
+                    "ChatConsumer" => chat_consumer::configure(config, settings),
+                    "ChatProducer" => chat_producer::configure(config, settings),
                     #[allow(unreachable_patterns)]
                     _ => {
                         log::warn!("unhandled {:#?} component configuration", k);
@@ -30,7 +31,7 @@ pub fn configure(settings: &settings::Settings) -> Result<Vec<ComponentInfo>, Co
                     return Err(e);
                 }
                 if let Ok(Some(sender)) = result {
-                    active_components.push(ComponentInfo::new(*k, sender));
+                    active_components.push(ComponentInfo::new(k.clone(), sender));
                 }
             }
         }

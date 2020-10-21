@@ -16,8 +16,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use d3_core::executor;
-use d3_core::machine_impl::*;
+use d3::core::executor;
+use d3::core::machine_impl::*;
 use d3_dev_instruction_sets::TestMessage;
 
 use d3_test_drivers::chaos_monkey::ChaosMonkeyDriver;

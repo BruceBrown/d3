@@ -247,13 +247,13 @@ pub fn configure(
     _components: &[ComponentInfo],
 ) -> Result<Option<ComponentSender>, ComponentError> {
     // ensure our service is configure in services
-    if !settings.services.contains(&Service::AliceService) {
+    if !settings.services.contains("AliceService") {
         log::debug!("alice service is not configured");
         return Ok(None);
     }
     // find ourself in the list
     for c in &settings.coordinator {
-        if let Some(value) = c.get(&Coordinator::AliceCoordinator) {
+        if let Some(value) = c.get("AliceCoordinator") {
             let maybe_coordinator = match value {
                 CoordinatorVariant::SimpleTcpConfig { tcp_address, .. } => Some(AliceCoordinator {
                     net_sender: get_network_sender(),
