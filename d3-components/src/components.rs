@@ -90,7 +90,7 @@ impl ComponentInfo {
     /// Creates and new ComponentInfo struct and returns it.
     pub const fn new(component: settings::Component, sender: ComponentSender) -> Self { Self { component, sender } }
     /// Get the component type for this component
-    pub const fn component(&self) -> settings::Component { self.component }
+    pub const fn component(&self) -> &settings::Component { &self.component }
     /// Get a reference to the sender for this component
     pub const fn sender(&self) -> &ComponentSender { &self.sender }
 }
@@ -100,7 +100,6 @@ mod tests {
     #[allow(unused_imports)] use super::*;
     use simplelog::*;
 
-    use crate::settings::Service;
     use d3_core::executor;
 
     #[derive(Debug, MachineImpl)]
@@ -126,7 +125,7 @@ mod tests {
                 match cmd {
                     ComponentCmd::NewSession(conn_id, service, sender) => {
                         assert_eq!(conn_id, 12345);
-                        assert_eq!(service, Service::EchoServer);
+                        assert_eq!(service, "EchoServer".to_string());
                         assert_eq!(false, Arc::clone(&sender).downcast::<Sender<TestMessage>>().is_ok());
                         assert_eq!(true, Arc::clone(&sender).downcast::<Sender<ComponentCmd>>().is_ok());
                         self.counter.store(1);
@@ -158,7 +157,7 @@ mod tests {
         if component_sender
             .send(ComponentCmd::NewSession(
                 12345,
-                Service::EchoServer,
+                "EchoServer".to_string(),
                 Arc::new(component_sender.clone()),
             ))
             .is_err()

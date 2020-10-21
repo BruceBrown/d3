@@ -1,5 +1,5 @@
 //! A Framework for Server Development
-//! What we have here is a Framework, for implementing a server. It is especially
+//! This crate provides a set of tools, for implementing a server. It is especially
 //! well suited for those cases where the server employs a pipeline architecture.
 //! There are two core concepts, the machine, and the instruction set. Combined
 //! with a channel sender and receiver, you have all of the parts necessary for
@@ -39,28 +39,65 @@
 //! // Alice's receive method will be called, likely on a different thread than this thread.
 //! sender.send(StateTable::Init).expect("send failed");
 //! ```
+//! The main `d3` crate just re-exports tools from smaller subrates:
+//! ## Derive Macro
+//!
+//! * [`d3-derive`], a derive macro for transforming an enum into an instruction set.
 //!
 //! ## Core
 //!
 //! * [`d3-core`], a sceduler and executor for machines.
-//! * [`d3-derive`], a derive macro for transforming an enum into an instruction set.
+//!
 //!
 //! ## Components
 //!
 //! * [`d3-components`], provides a component/coordinator heirachy of machines.
 //!
-//! ## Services
-//!
-//! * [`echo-service`], an example of a trivial echo service.
-//! * [`chat-service`], an example of a trivial chat service.
 //!
 //! ## Instruction Sets and Test Drivers
 //!
-//! * [`d3-dev-instruction-sets`], example of some simple instruction sets.
-//! * [`d3-test-driver`], example of implementing an instruction set. The test driver is used by
-//! bench and test.
+//! * [`d3-dev-instruction-sets`](https://github.com/BruceBrown/d3/tree/master/d3-dev-instruction-sets/src),
+//! example of some simple instruction sets.
+//! * [`d3-test-driver`](https://github.com/BruceBrown/d3/tree/master/d3-test-drivers/src),
+//!  example of implementing an instruction set. The test driver
+//! is used by bench and test.
 //!
 //! ## Examples
 //!
-//! * [`monitor-service`], an example of monitoring the core.
-//! * [`alice-service`], an example of a web-server sending a form and processing the POST.
+//! ### Services
+//! * [`alice-service`](https://github.com/BruceBrown/d3/tree/master/examples/alice-service/src/alice.rs),
+//! an example of a web-service sending a form and processing the POST.
+//! * [`chat-service`](https://github.com/BruceBrown/d3/tree/master/examples/chat-service/src),
+//! an example of a trivial chat service.
+//! * [`echo-service`](https://github.com/BruceBrown/d3/tree/master/examples/echo-service/src),
+//! an example of a trivial echo service.
+//! * [`monitor-service`](https://github.com/BruceBrown/d3/tree/master/examples/monitor-service/src),
+//! an example of service for monitoring the core.
+//!
+//! ### Server
+//! * [`test-server`](https://github.com/BruceBrown/d3/tree/master/examples/test-server/src),
+//! an example of a server running the aforementioned services
+
+// re-publish all the bits, so that you only need d3.
+pub mod d3_derive {
+    pub use d3_derive::*;
+}
+pub mod core {
+    pub mod machine_impl {
+        pub use d3_core::machine_impl::{self, *};
+    }
+    pub mod executor {
+        pub use d3_core::executor::{self, *};
+    }
+    pub use d3_core::send_cmd;
+}
+pub mod components {
+    pub mod network {
+        pub use d3_components::network::{self, *};
+    }
+    pub use d3_components::components::{self, *};
+    pub use d3_components::coordinators::{self, *};
+    pub mod settings {
+        pub use d3_components::settings::{self, *};
+    }
+}

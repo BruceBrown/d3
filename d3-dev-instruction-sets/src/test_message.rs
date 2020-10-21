@@ -7,8 +7,8 @@ use super::*;
 ///
 /// ```
 /// # #[allow(unused_imports)] use std::sync::{Arc, Mutex};
-/// # use d3_core::machine_impl::*;
-/// # #[allow(unused_imports)] use d3_derive::*;
+/// # use d3::core::machine_impl::*;
+/// # #[allow(unused_imports)] use d3::d3_derive::*;
 /// #[allow(dead_code)]
 /// #[derive(Debug, Clone, Eq, PartialEq, MachineImpl)]
 /// pub enum TestMessage {
@@ -59,8 +59,8 @@ use super::*;
 /// can be provided. This illustrates advancing TestMessage::ChaosMonkey.
 /// ```
 /// # #[allow(unused_imports)] use std::sync::{Arc, Mutex};
-/// # use d3_core::machine_impl::*;
-/// # #[allow(unused_imports)] use d3_derive::*;
+/// # use d3::core::machine_impl::*;
+/// # #[allow(unused_imports)] use d3::d3_derive::*;
 /// # #[allow(dead_code)]
 /// # #[derive(Debug, Clone, Eq, PartialEq, MachineImpl)]
 /// # pub enum TestMessage {

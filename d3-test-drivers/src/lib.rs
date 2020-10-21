@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use rand::distributions::{Distribution, Uniform};
 
-use d3_core::executor;
-use d3_core::machine_impl::*;
+use d3::core::executor;
+use d3::core::machine_impl::*;
 use d3_dev_instruction_sets::{ChaosMonkeyMutation, TestMessage};
 
 type TestMessageSender = Sender<TestMessage>;

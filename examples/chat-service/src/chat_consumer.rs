@@ -56,7 +56,7 @@ impl ConsumerComponent {
             let (_instance, sender) = executor::connect(ChatInstance::new(conn_uuid));
             send_cmd(
                 &session_sender,
-                ChatCmd::Instance(conn_uuid, sender, settings::Component::ChatConsumer),
+                ChatCmd::Instance(conn_uuid, sender, "ChatConsumer".to_string()),
             );
         } else {
             log::warn!("chat consumer component received an unknown sender")
@@ -71,7 +71,7 @@ impl Machine<ComponentCmd> for ConsumerComponent {
 
     fn receive(&self, cmd: ComponentCmd) {
         match cmd {
-            ComponentCmd::NewSession(conn_uuid, service, any_sender) if service == Service::ChatServer => {
+            ComponentCmd::NewSession(conn_uuid, service, any_sender) if service == "ChatServer" => {
                 self.create_instance(conn_uuid, any_sender)
             },
             ComponentCmd::Start => (),

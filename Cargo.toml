@@ -11,7 +11,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/BruceBrown/d3"
 homepage = "https://github.com/BruceBrown/d3"
-#documentation = "https://docs.rs/d3"
+documentation = "https://docs.rs/d3"
 description = "A framework for server development"
 keywords = ["non-blocking", "server", "framework"]
 categories = ["asynchronous", "concurrency"]
@@ -54,27 +54,67 @@ rand = "0.7"
 d3-core = {version = "0.1.1", path = "./d3-core"}
 d3-derive = {version = "0.1.1", path = "./d3-derive"}
 d3-components =  {version = "0.1.0", path = "./d3-components"}
-echo-service = {version = "0.1.0", path = "./echo-service"}
-chat-service = {version = "0.1.0", path = "./chat-service"}
 
 
 [dev-dependencies]
+
+# used in test and bench
 criterion = "0.3"
+
+d3-dev-instruction-sets = {path = "./d3-dev-instruction-sets"}
+d3-test-drivers = {path = "./d3-test-drivers"}
+
+# services for the test server
+alice-service = {path = "./examples/alice-service"}
+chat-service = {path = "./examples/chat-service"}
+echo-service = {path = "./examples/echo-service"}
+monitor-service = {path = "./examples/monitor-service"}
+
+
+
+# used in example
+httparse = "1.3.4"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 
-d3-dev-instruction-sets = {version = "0.1.0", path = "./d3-dev-instruction-sets"}
-d3-test-drivers = {version = "0.1.0", path = "./d3-test-drivers"}
+
+[[example]]
+name = "alice-service"
+crate-type = ["staticlib"]
+path = "./examples/alice-service/src/lib.rs"
+
+
+[[example]]
+name = "chat-service"
+crate-type = ["staticlib"]
+path = "./examples/chat-service/src/lib.rs"
+
+
+[[example]]
+name = "echo-service"
+crate-type = ["staticlib"]
+path = "./examples/echo-service/src/lib.rs"
+
+
+[[example]]
+name = "monitor-service"
+crate-type = ["staticlib"]
+path = "./examples/monitor-service/src/lib.rs"
+
+[[example]]
+name = "test-server"
+path = "./examples/test-server/src/main.rs"
+
 
 [workspace]
 members = [
  "d3-core",
  "d3-derive",
- "d3-dev-instruction-sets",
  "d3-components",
- "chat-service",
- "echo-service",
- "d3-test-server",
+ "d3-dev-instruction-sets",
  "d3-test-drivers",
+ "examples/chat-service",
+ "examples/echo-service",
  "examples/monitor-service",
  "examples/alice-service",
+ "examples/test-server",
 ]

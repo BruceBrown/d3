@@ -10,8 +10,8 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    use d3_core::executor;
-    use d3_core::machine_impl::*;
+    use d3::core::executor::{self, *};
+    use d3::core::machine_impl::*;
     use d3_dev_instruction_sets::{TestMessage, TestStruct};
 
     use d3_test_drivers::chaos_monkey::ChaosMonkeyDriver;
@@ -57,9 +57,6 @@ mod tests {
         impl Machine<TestMessage> for Alice {
             fn receive(&self, _message: TestMessage) {}
         }
-
-        use d3_core::executor::*;
-        use d3_dev_instruction_sets::*;
 
         run_test(|| {
             let machine_count = 10;

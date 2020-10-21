@@ -3,13 +3,13 @@ use std::collections::HashSet;
 
 pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Option<ComponentSender>, ComponentError> {
     // ensure our service is configure in services
-    if !settings.services.contains(&Service::MonitorService) {
+    if !settings.services.contains("MonitorService") {
         log::debug!("monitor service is not configured");
         return Ok(None);
     }
     // find ourself in the list
     for c in &settings.coordinator {
-        if let Some(value) = c.get(&Coordinator::MonitorCoordinator) {
+        if let Some(value) = c.get("MonitorCoordinator") {
             let maybe_coordinator = match value {
                 CoordinatorVariant::SimpleTcpConfig { tcp_address, .. } => Some(MonitorCoordinator {
                     net_sender: get_network_sender(),

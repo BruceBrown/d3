@@ -20,5 +20,5 @@ crossbeam = "0.8"
 smart-default = "0.6"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 
-d3-core = {version = "0.1.1", path = "../d3-core"}
-d3-derive = {version = "0.1.1", path = "../d3-derive"}
+d3 = {version = "0.1.0", path = "../."}
+

@@ -9,7 +9,7 @@ authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/BruceBrown/d3/d3-components"
+repository = "https://github.com/BruceBrown/d3"
 homepage = "https://github.com/BruceBrown/d3"
 #documentation = "https://docs.rs/d3"
 description = "A framework for server development -- example echo service"
@@ -22,10 +22,8 @@ exclude = ["/ci/*", "/bors.toml"]
 
 crossbeam = "0.8"
 smart-default = "0.6"
-atomic_refcell = "0.1"
-log = "0.4"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
+log = "0.4"
+httparse = "1.3.4"
 
-d3-core = {version = "0.1.1", path = "../d3-core"}
-d3-derive = {version = "0.1.1", path = "../d3-derive"}
-d3-components = {version = "0.1.0", path = "../d3-components"}
+d3 = {version = "0.1.0", path = "../../../d3"}

@@ -16,7 +16,7 @@ impl CoordinatorInfo {
         Self { coordinator, sender }
     }
     /// Get the coordinator type for this coordinator
-    pub const fn coordinator(&self) -> settings::Coordinator { self.coordinator }
+    pub const fn coordinator(&self) -> &settings::Coordinator { &self.coordinator }
     /// Get a reference to the sender for this coordinator
     pub const fn sender(&self) -> &ComponentSender { &self.sender }
 }

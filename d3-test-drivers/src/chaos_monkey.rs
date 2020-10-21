@@ -13,7 +13,7 @@ use super::*;
 ///
 /// For example, if the inflection is 3, the message with fwd 0, 1, 2, 3, 3, 2, 1, 0.
 /// If there are 400 messages, and an inflection of 9 20x400 messages will be propagated.
-/// This is purely random, if you 4000 machines, in this scenerio each machine would be
+/// This is purely random, if you have 4000 machines, in this scenerio each machine would be
 /// visted by ~2 messages.
 ///
 /// The message count represents concurrent number of messages flowing through the machines,
