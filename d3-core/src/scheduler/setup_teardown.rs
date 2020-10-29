@@ -51,7 +51,7 @@ pub struct Server {
 }
 impl Server {
     // assign a machine to the scheduler
-    pub fn assign_machine(machine: MachineAdapter) {
+    pub fn assign_machine(machine: ShareableMachine) {
         match &server.borrow().scheduler {
             ServerField::Scheduler(scheduler) => scheduler.assign_machine(machine),
             _ => log::error!("Server not running, unable to assign machine."),
@@ -71,6 +71,24 @@ impl Server {
             _ => log::error!("Server not running, unable to add stats sender."),
         }
     }
+    // request stats
+    fn request_stats() {
+        match &server.borrow().executor {
+            ServerField::Executor(executor) => executor.request_stats(),
+            _ => log::error!("Server not running, unable to request executor stats."),
+        }
+        match &server.borrow().scheduler {
+            ServerField::Scheduler(scheduler) => scheduler.request_stats(),
+            _ => log::error!("Server not running, unable to request scheduler stats."),
+        }
+    }
+    // request machine info
+    fn request_machine_info() {
+        match &server.borrow().scheduler {
+            ServerField::Scheduler(scheduler) => scheduler.request_machine_info(),
+            _ => log::error!("Server not running, unable to request machine info."),
+        }
+    }
     // wake executor threads
     pub fn wake_executor_threads() {
         if server_state.load() != ServerState::Running {
@@ -79,6 +97,16 @@ impl Server {
         match &server.borrow().executor {
             ServerField::Executor(executor) => executor.wake_parked_threads(),
             _ => log::error!("Server not running, unable to wake executor threads."),
+        }
+    }
+
+    pub fn get_run_queue() -> Result<TaskInjector, ()> {
+        if server_state.load() != ServerState::Running {
+            return Err(());
+        }
+        match &server.borrow().executor {
+            ServerField::Executor(executor) => Ok(executor.get_run_queue()),
+            _ => panic!("Server not running, unable to get executor run queue."),
         }
     }
 }
@@ -90,6 +118,13 @@ pub fn add_core_stats_sender(sender: CoreStatsSender) { Server::add_core_stats_s
 /// The remove_core_stats_sender function removes a sender from the list of senders receiving
 /// core statistic updates.
 pub fn remove_core_stats_sender(sender: CoreStatsSender) { Server::remove_core_stats_sender(sender); }
+
+/// Request stats will request the subcomponents to send their stats now, rather than waiting
+/// for their periodic sending.
+pub fn request_stats_now() { Server::request_stats(); }
+
+/// Request machine_info will request the scheduler to send machine information
+pub fn request_machine_info() { Server::request_machine_info(); }
 
 /// The start_server function starts the server, putting it in a state where it can create machines
 /// that are connected to the collective.
@@ -103,7 +138,6 @@ pub fn start_server() {
         }
         thread::sleep(std::time::Duration::from_millis(50));
         if start.elapsed() > std::time::Duration::from_secs(120) {
-            println!("force stopping server");
             log::error!("force stopping server");
             stop_server();
             start = std::time::Instant::now();
@@ -112,8 +146,7 @@ pub fn start_server() {
     log::info!("aquired server");
     if get_executor_count() == 0 {
         let num = num_cpus::get();
-        // if we have enough, spare one for the sched + overhead
-        let num = if num > 2 { num - 1 } else { num };
+        // Give them all to the executor, everything else is low-cost overhead
         set_executor_count(num);
         log::info!("setting executor count to {}", num);
     }
@@ -181,7 +214,6 @@ pub fn set_executor_count(new: usize) { executor_count.store(new); }
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::scheduler::sched::set_selector_maintenance_duration;
     use simplelog::*;
     use std::panic;
 
@@ -191,15 +223,7 @@ pub mod tests {
         T: FnOnce() + panic::UnwindSafe,
     {
         // install a simple logger
-        CombinedLogger::init(vec![TermLogger::new(
-            LevelFilter::Error,
-            Config::default(),
-            TerminalMode::Mixed,
-        )])
-        .unwrap();
-        // tweaks for more responsive testing
-        set_selector_maintenance_duration(std::time::Duration::from_millis(20));
-
+        CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).unwrap();
         setup();
 
         let result = panic::catch_unwind(|| test());

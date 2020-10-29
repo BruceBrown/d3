@@ -118,6 +118,7 @@ extern crate log;
 // pull in all of the modules
 mod foundation {
     use super::*;
+    pub mod linear_backoff;
     pub mod machine;
     pub mod simple_event_timer;
     pub mod thread_safe;
@@ -125,7 +126,7 @@ mod foundation {
 mod tls {
     #![allow(dead_code)]
     use super::*;
-    use crate::foundation::thread_safe::*;
+    use crate::foundation::{linear_backoff::LinearBackoff, thread_safe::*};
     pub mod collective;
     pub mod tls_executor;
 }
@@ -133,6 +134,7 @@ mod channel {
     #![allow(dead_code)]
     use super::*;
     use crate::foundation::machine::*;
+    use crate::tls::collective::{MachineState, WeakShareableMachine};
     use crate::tls::tls_executor::ExecutorData;
     mod connection;
     pub mod machine_channel;
@@ -151,7 +153,7 @@ mod scheduler {
     #![allow(dead_code)]
     use super::*;
     use crate::collective::machine::*;
-    use crate::foundation::{machine::*, simple_event_timer::*};
+    use crate::foundation::{linear_backoff::*, machine::*, simple_event_timer::*};
     use crate::tls::{collective::*, tls_executor::*};
     pub mod executor;
     pub mod machine;
@@ -174,10 +176,9 @@ pub mod machine_impl {
     pub use crate::collective::machine::MachineBuilder;
     pub use crate::foundation::{machine::Machine, machine::MachineImpl};
     pub use crate::tls::{
-        collective::{CollectiveState, MachineAdapter, MachineDependentAdapter, MachineState, ShareableMachine},
+        collective::{MachineAdapter, MachineDependentAdapter, MachineState, ShareableMachine, SharedMachineState},
         tls_executor::{
-            tls_executor_data, CollectiveSenderAdapter, ExecutorDataField, ExecutorStats,
-            SharedCollectiveSenderAdapter, Task, TrySendError,
+            tls_executor_data, ExecutorDataField, ExecutorStats, MachineDependentSenderAdapter, MachineSenderAdapter, Task, TrySendError,
         },
     };
 }
@@ -186,24 +187,26 @@ pub mod machine_impl {
 pub use crate::collective::machine::send_cmd;
 
 // package up thing needed to tune and start the schduler and inject
-// machines into the collective.
+// machines into the collective. For backward compatability, export deprecated
+// symbols until they've been dprecrated for a while.
+#[allow(deprecated)]
 pub mod executor {
     pub use crate::scheduler::{
-        executor::{get_time_slice, set_time_slice},
+        executor::{get_run_queue_len, get_time_slice, set_time_slice},
         machine::{
-            and_connect, and_connect_unbounded, and_connect_with_capacity, connect, connect_unbounded,
-            connect_with_capacity, get_default_channel_capacity, set_default_channel_capacity,
+            and_connect, and_connect_unbounded, and_connect_with_capacity, connect, connect_unbounded, connect_with_capacity,
+            get_default_channel_capacity, set_default_channel_capacity,
         },
         sched::{
-            get_machine_count, get_machine_count_estimate, get_selector_maintenance_duration,
-            set_machine_count_estimate, set_selector_maintenance_duration,
+            get_machine_count, get_machine_count_estimate, get_selector_maintenance_duration, set_machine_count_estimate,
+            set_selector_maintenance_duration,
         },
         setup_teardown::{get_executor_count, set_executor_count, start_server, stop_server},
     };
     pub mod stats {
         pub use crate::scheduler::{
             sched::SchedStats,
-            setup_teardown::{add_core_stats_sender, remove_core_stats_sender},
+            setup_teardown::{add_core_stats_sender, remove_core_stats_sender, request_machine_info, request_stats_now},
             traits::{CoreStatsMessage, CoreStatsSender},
         };
         pub use crate::tls::tls_executor::ExecutorStats;

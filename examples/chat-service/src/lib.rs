@@ -20,8 +20,6 @@ extern crate crossbeam;
 use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 
-use uuid::{self};
-
 // Maybe turn this into a prelude?
 #[allow(unused_imports)]
 use d3::{
@@ -59,14 +57,7 @@ mod tests {
         //
 
         // install a simple logger
-        CombinedLogger::init(vec![TermLogger::new(
-            LevelFilter::Error,
-            Config::default(),
-            TerminalMode::Mixed,
-        )])
-        .unwrap();
-        // tweaks for more responsive testing
-        executor::set_selector_maintenance_duration(std::time::Duration::from_millis(20));
+        CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).unwrap();
 
         // start the server and network
         executor::start_server();

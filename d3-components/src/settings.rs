@@ -23,12 +23,6 @@ pub struct Settings {
     pub additional: Vec<HashMap<Additional, AdditionalVariant>>,
 }
 
-/// This names all of the feature toggles
-#[derive(Debug, Deserialize, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum _Feature {
-    EchoServer,
-    Forwarder,
-}
 pub type Feature = String;
 pub type Service = String;
 pub type Coordinator = String;

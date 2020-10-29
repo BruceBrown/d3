@@ -25,8 +25,10 @@ where
     pub fn get(&self) -> T { self.object.load() }
     #[inline]
     pub fn set(&self, new: T) { self.object.store(new) }
+    //#[inline]
+    // pub fn compare_and_set(&self, current: T, new: T) -> T { self.object.compare_and_swap(current, new) }
     #[inline]
-    pub fn compare_and_set(&self, current: T, new: T) -> T { self.object.compare_and_swap(current, new) }
+    pub fn compare_and_exchange(&self, current: T, new: T) -> Result<T, T> { self.object.compare_exchange(current, new) }
 }
 
 /// ProtectedInner is a trait for providing access to an otherwise inaccessible object.

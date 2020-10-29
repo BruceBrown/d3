@@ -19,6 +19,7 @@ exclude = ["/ci/*", "/bors.toml"]
 crossbeam = "0.8"
 smart-default = "0.6"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
+log = "0.4"
 
-d3 = {version = "0.1.0", path = "../."}
+d3 = {version = "0.1.2", path = "../."}
 

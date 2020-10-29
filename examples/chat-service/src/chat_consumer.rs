@@ -31,10 +31,7 @@ use std::collections::HashMap;
 // The entry point for configuring the chat consumer component. It receives two sets of settings,
 // component specific and the full set. In most cases the specific set is sufficient.
 // In this case, there's very little to do.
-pub fn configure(
-    config: SimpleConfig,
-    _settings: &settings::Settings,
-) -> Result<Option<ComponentSender>, ComponentError> {
+pub fn configure(config: SimpleConfig, _settings: &settings::Settings) -> Result<Option<ComponentSender>, ComponentError> {
     if config.enabled {
         let (_, sender) = executor::connect(ConsumerComponent::new());
         Ok(Some(sender))
@@ -54,10 +51,7 @@ impl ConsumerComponent {
     fn create_instance(&self, conn_uuid: u128, any_sender: AnySender) {
         if let Ok(session_sender) = Arc::clone(&any_sender).downcast::<ChatSender>() {
             let (_instance, sender) = executor::connect(ChatInstance::new(conn_uuid));
-            send_cmd(
-                &session_sender,
-                ChatCmd::Instance(conn_uuid, sender, "ChatConsumer".to_string()),
-            );
+            send_cmd(&session_sender, ChatCmd::Instance(conn_uuid, sender, "ChatConsumer".to_string()));
         } else {
             log::warn!("chat consumer component received an unknown sender")
         }

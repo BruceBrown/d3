@@ -24,6 +24,8 @@ pub enum MonitorMessage {
     ExecutorStats(ExecutorStats),
     // Sent by the scheduler, providing periodic stats
     SchedStats(SchedStats),
+    // Sent by the scheduler, providing machine info
+    MachineInfo(ShareableMachine),
 }
 pub type MonitorSender = crossbeam::channel::Sender<MonitorMessage>;
 
@@ -78,8 +80,12 @@ pub trait ExecutorControl: Send + Sync {
     fn wake_parked_threads(&self);
     /// notifies the executor that an executor completed and can be joined
     fn joinable_executor(&self, id: usize);
+    /// get run_queue
+    fn get_run_queue(&self) -> TaskInjector;
     /// stop the executor
     fn stop(&self);
+    /// request stats from the executors
+    fn request_stats(&self);
 }
 pub type ExecutorControlObj = Arc<dyn ExecutorControl>;
 
@@ -89,11 +95,13 @@ pub enum SchedCmd {
     Start,
     Stop,
     Terminate(bool),
-    New(MachineAdapter),
-    Waiting(usize),
+    New(ShareableMachine),
+    SendComplete(usize),
     Remove(usize),
     ErrorRecv(usize),
-    RecvBlock(usize, Instant),
+    RecvBlock(usize),
+    RequestStats,
+    RequestMachineInfo,
     // Executor stuff
     RebuildStealers,
 }
@@ -108,7 +116,11 @@ pub trait SchedulerFactory {
 /// The scheduler trait
 pub trait Scheduler: Send + Sync {
     /// assigns a new machine, making it eligable for scheduling and running
-    fn assign_machine(&self, machine: MachineAdapter);
+    fn assign_machine(&self, machine: ShareableMachine);
+    /// request stats from the scheduler
+    fn request_stats(&self);
+    /// request machine info
+    fn request_machine_info(&self);
     /// stop the scheduler
     fn stop(&self);
 }

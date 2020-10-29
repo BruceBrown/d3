@@ -49,9 +49,7 @@ pub fn run(settings: &settings::Settings) {
 
 /// This simply takes two maps, merges them, returning the merged result. In our case
 /// we're taking a default map and overriding with any fields provided in the primary map
-fn merge_maps(map1: settings::FieldMap, map2: settings::FieldMap) -> settings::FieldMap {
-    map1.into_iter().chain(map2).collect()
-}
+fn merge_maps(map1: settings::FieldMap, map2: settings::FieldMap) -> settings::FieldMap { map1.into_iter().chain(map2).collect() }
 
 #[derive(Debug)]
 struct RunParams {
@@ -73,9 +71,7 @@ impl From<settings::FieldMap> for RunParams {
             forwarding_multiplier: *map
                 .get(&settings::Field::forwarding_multiplier)
                 .expect("forwarding_multiplier missing"),
-            timeout: std::time::Duration::from_secs(
-                *map.get(&settings::Field::timeout).expect("timeout missing") as u64
-            ),
+            timeout: std::time::Duration::from_secs(*map.get(&settings::Field::timeout).expect("timeout missing") as u64),
             unbound_queue: *map.get(&settings::Field::unbound_queue).unwrap_or(&0) != 0,
         }
     }
@@ -91,7 +87,7 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
 
     let mut daisy_chain = DaisyChainDriver::default();
     daisy_chain.machine_count = params.machine_count;
-    daisy_chain.message_count = params.machine_count;
+    daisy_chain.message_count = params.messages;
     daisy_chain.bound_queue = !params.unbound_queue;
     daisy_chain.forwarding_multiplier = params.forwarding_multiplier;
     daisy_chain.duration = params.timeout;
@@ -103,14 +99,6 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
     }
     log::info!("completed daisy-chain run in {:#?}", t.elapsed());
     DaisyChainDriver::teardown(daisy_chain);
-    // Enable if you want to watch cleanup
-    // unnecessary, but this gives a graceful cleanup before proceeding...
-    // drop(machines);
-    // drop(first_sender);
-    // drop(last_sender);
-    // drop(receiver);
-    // drop(instances);
-    // std::thread::sleep(std::time::Duration::from_millis(1000));
 }
 
 fn run_fanout_fanin(settings: &ForwarderSettings) {
@@ -123,12 +111,13 @@ fn run_fanout_fanin(settings: &ForwarderSettings) {
 
     let mut fanout_fanin = FanoutFaninDriver::default();
     fanout_fanin.machine_count = params.machine_count;
-    fanout_fanin.message_count = params.machine_count;
+    fanout_fanin.message_count = params.messages;
     fanout_fanin.bound_queue = !params.unbound_queue;
 
     fanout_fanin.duration = params.timeout;
 
     fanout_fanin.setup();
+    log::debug!("fanout_fanin: starting run");
     let t = std::time::Instant::now();
     for _ in 0 .. params.iterations {
         fanout_fanin.run();
@@ -153,16 +142,19 @@ fn run_chaos_monkey(settings: &ForwarderSettings) {
 
     let mut chaos_monkey = ChaosMonkeyDriver::default();
     chaos_monkey.machine_count = params.machine_count;
-    chaos_monkey.message_count = params.machine_count;
+    chaos_monkey.message_count = params.messages;
     chaos_monkey.bound_queue = !params.unbound_queue;
     chaos_monkey.duration = params.timeout;
     chaos_monkey.inflection_value = inflection_value as u32;
 
     chaos_monkey.setup();
+    log::debug!("chaos_monkey: starting run");
+    d3::core::executor::stats::request_stats_now();
     let t = std::time::Instant::now();
     for _ in 0 .. params.iterations {
         chaos_monkey.run();
     }
+    d3::core::executor::stats::request_stats_now();
     log::info!("completed chaos_monkey run in {:#?}", t.elapsed());
     ChaosMonkeyDriver::teardown(chaos_monkey);
 }

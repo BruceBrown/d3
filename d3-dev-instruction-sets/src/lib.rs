@@ -12,11 +12,11 @@ use d3::core::machine_impl::*;
 
 #[allow(unused_imports)] use d3::d3_derive::*;
 
+mod test_message;
+pub use test_message::{ChaosMonkeyMutation, TestMessage, TestStruct};
+
 mod something;
 pub use something::Something;
 
 mod state_table;
 pub use state_table::StateTable;
-
-mod test_message;
-pub use test_message::{ChaosMonkeyMutation, TestMessage, TestStruct};

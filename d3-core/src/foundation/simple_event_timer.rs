@@ -24,6 +24,7 @@ impl SimpleEventTimer {
             ..Self::default()
         }
     }
+    pub fn remaining(&self) -> Duration { self.duration - self.last_event.elapsed() }
     pub fn check(&mut self) -> bool {
         if self.last_event.elapsed() >= self.duration {
             // may need to advance several iterations if we've been asleep

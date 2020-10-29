@@ -5,15 +5,15 @@
 #
 dev_mode = true
 log_level = "Debug"
-test_server_duration = 20
+test_server_duration = 0
 
 #
 # Enable Forwarder feature to run daisy_chain nad fanout_fanin tests.
 features = ["Forwarder"]
-#services = []
+services = []
 
 [executor]
-executors = 3
+executors = 4
 queue_size = 500
 time_slice = 20
 
@@ -21,7 +21,7 @@ time_slice = 20
 [additional.Forwarder]
 run = [
 #    "daisy_chain",
-#    "fanout_fanin",
+    "fanout_fanin",
 #    "chaos_monkey",
 ]
 
@@ -33,17 +33,18 @@ iterations = 1
 forwarding_multiplier = 1
 
 [additional.Forwarder.daisy_chain]
-timeout = 600
-machines = 4000
+timeout = 10
+machines = 2000
 messages = 100
 forwarding_multiplier = 1
-iterations = 10
+iterations = 6000
+unbound_queue = 1
 
 [additional.Forwarder.fanout_fanin]
 fanin_capacity = 500
-machines = 400
-messages = 1
-iterations = 1
+machines = 500
+messages = 15
+iterations = 6000
 unbound_queue = 0
 
 
@@ -56,9 +57,9 @@ unbound_queue = 0
 # For large tests, having a larger queue may reduce startup warnings, you use
 # the unbound_queue option
 #
-timeout = 600
-machines = 2000
-messages = 100
-inflection_value = 49
-iterations = 1
-unbound_queue = 1
+timeout = 1200
+machines = 4500
+messages = 200
+inflection_value = 99
+iterations = 6000
+unbound_queue = 0

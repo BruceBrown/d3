@@ -22,11 +22,7 @@ impl Factory {
     /// get the sender for the scheduler
     pub fn get_sender(&self) -> SchedSender { self.sender.clone() }
     /// start the scheduler
-    pub fn create_and_start(
-        &self,
-        monitor: MonitorSender,
-        queues: (TaskInjector, SchedTaskInjector),
-    ) -> impl Scheduler {
+    pub fn create_and_start(&self, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> impl Scheduler {
         // this where different schedulers can be started
         log::info!("creating Scheduler");
         DefaultScheduler::new(self.sender.clone(), self.receiver.clone(), monitor, queues)

@@ -18,6 +18,7 @@ impl<T> Receiver<T>
 where
     T: MachineImpl,
 {
+    pub fn get_id(&self) -> usize { self.channel_id }
     pub fn clone_receiver(&self) -> crossbeam::channel::Receiver<T> { self.receiver.clone() }
     pub fn receiver(&self) -> &crossbeam::channel::Receiver<T> { &self.receiver }
 
@@ -25,9 +26,7 @@ where
 
     pub fn recv(&self) -> Result<T, RecvError> { self.receiver.recv() }
 
-    pub fn recv_timeout(&self, timeout: std::time::Duration) -> Result<T, RecvTimeoutError> {
-        self.receiver.recv_timeout(timeout)
-    }
+    pub fn recv_timeout(&self, timeout: std::time::Duration) -> Result<T, RecvTimeoutError> { self.receiver.recv_timeout(timeout) }
 
     pub fn is_empty(&self) -> bool { self.receiver.is_empty() }
 
@@ -66,18 +65,12 @@ impl<T> PartialEq for Receiver<T>
 where
     T: MachineImpl,
 {
-    fn eq(&self, other: &Self) -> bool {
-        self.channel_id == other.channel_id && self.receiver.same_channel(&other.receiver)
-    }
+    fn eq(&self, other: &Self) -> bool { self.channel_id == other.channel_id && self.receiver.same_channel(&other.receiver) }
 }
 
 impl<T> Eq for Receiver<T> where T: MachineImpl {}
 
-pub fn wrap_receiver<T>(
-    receiver: crossbeam::channel::Receiver<T>,
-    channel_id: usize,
-    connection: ThreadSafeConnection,
-) -> Receiver<T>
+pub fn wrap_receiver<T>(receiver: crossbeam::channel::Receiver<T>, channel_id: usize, connection: ThreadSafeConnection) -> Receiver<T>
 where
     T: MachineImpl,
 {

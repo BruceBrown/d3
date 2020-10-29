@@ -442,9 +442,7 @@ impl NetworkThread {
         let token = Token(key);
         let bind_addr = addr.parse().unwrap();
         let mut listener = TcpListener::bind(bind_addr)?;
-        self.poll
-            .registry()
-            .register(&mut listener, token, Interest::READABLE)?;
+        self.poll.registry().register(&mut listener, token, Interest::READABLE)?;
         let server = Server {
             is_dead: false,
             bind_addr: addr,
@@ -456,12 +454,7 @@ impl NetworkThread {
     }
 
     // The server sender is stored as a placeholder, it will be replaced subsequently.
-    fn store_connection(
-        &mut self,
-        server_token: &Token,
-        connection: TcpStream,
-        address: SocketAddr,
-    ) -> net::Result<()> {
+    fn store_connection(&mut self, server_token: &Token, connection: TcpStream, address: SocketAddr) -> net::Result<()> {
         if let Some(server) = self.servers.get(server_token.0) {
             let entry = self.connections.vacant_entry();
             let key = entry.key();

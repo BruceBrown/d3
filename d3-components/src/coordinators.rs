@@ -12,9 +12,7 @@ pub struct CoordinatorInfo {
 }
 impl CoordinatorInfo {
     /// Creates and new CoordinatorInfo struct and returns it.
-    pub const fn new(coordinator: settings::Coordinator, sender: ComponentSender) -> Self {
-        Self { coordinator, sender }
-    }
+    pub const fn new(coordinator: settings::Coordinator, sender: ComponentSender) -> Self { Self { coordinator, sender } }
     /// Get the coordinator type for this coordinator
     pub const fn coordinator(&self) -> &settings::Coordinator { &self.coordinator }
     /// Get a reference to the sender for this coordinator

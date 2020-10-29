@@ -42,12 +42,7 @@ impl Machine<NetCmd> for AliceCoordinator {
     fn receive(&self, cmd: NetCmd) {
         // normally, you'd do some matching, but since its just 1 case, a let works better
         if let NetCmd::NewConn(conn_id, to_addr, from_addr, _) = cmd {
-            log::debug!(
-                "received connection [from={}, to={}, conn_id={}]",
-                to_addr,
-                from_addr,
-                conn_id
-            );
+            log::debug!("received connection [from={}, to={}, conn_id={}]", to_addr, from_addr, conn_id);
             self.add_connection(conn_id);
         }
     }
@@ -96,9 +91,7 @@ impl Machine<NetCmd> for Alice {
         match cmd {
             NetCmd::RecvBytes(_conn_id, bytes) => self.parse(bytes),
             NetCmd::CloseConn(_conn_id) => log::debug!("{} closed by remote", self.logtag),
-            NetCmd::SendReady(_conn_id, bytes_available) => {
-                log::debug!("{} can send {} more bytes", self.logtag, bytes_available)
-            },
+            NetCmd::SendReady(_conn_id, bytes_available) => log::debug!("{} can send {} more bytes", self.logtag, bytes_available),
             _ => (),
         }
     }
@@ -242,10 +235,7 @@ impl Alice {
 }
 
 // The ugliest part of a coordinator is the configuration parsing.
-pub fn configure(
-    settings: &Settings,
-    _components: &[ComponentInfo],
-) -> Result<Option<ComponentSender>, ComponentError> {
+pub fn configure(settings: &Settings, _components: &[ComponentInfo]) -> Result<Option<ComponentSender>, ComponentError> {
     // ensure our service is configure in services
     if !settings.services.contains("AliceService") {
         log::debug!("alice service is not configured");

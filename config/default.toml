@@ -3,7 +3,7 @@
 # Run the echo server on locahhost port 9000
 # Run the chat server on localhost port 7000
 #
-services = ["EchoServer", "ChatServer", "MonitorService", "AliceService"]
+#services = ["EchoServer", "ChatServer", "MonitorService", "AliceService"]
 features = []
 
 [executor]

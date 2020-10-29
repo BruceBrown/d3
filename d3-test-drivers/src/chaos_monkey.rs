@@ -53,7 +53,11 @@ impl ChaosMonkeyDriver {
             };
             self.senders.push(s);
         }
-        let (_, notifier) = executor::connect(Forwarder::new(self.machine_count + 1));
+        let (_, notifier) = if self.bound_queue {
+            executor::connect(Forwarder::new(self.machine_count + 1))
+        } else {
+            executor::connect_unbounded(Forwarder::new(self.machine_count + 1))
+        };
         // build a complete map where every machine has a sender to every other machine
         // may need to build a partial mapping for large config, let's see
         for s1 in &self.senders {
@@ -67,14 +71,17 @@ impl ChaosMonkeyDriver {
         notifier.send(TestMessage::Notify(sender, self.message_count)).unwrap();
         self.receiver = Some(receiver);
         // wait for the scheduler/executor to get them all assigned
+        log::debug!("chaos_monkey: base-line: {}", self.baseline);
         loop {
             thread::yield_now();
             if executor::get_machine_count() >= self.baseline + self.machine_count - 1 {
                 break;
             }
         }
+        log::debug!("chaos_monkey: setup complete");
     }
     pub fn teardown(chaos_monkey: Self) {
+        log::debug!("chaos_monkey: tear-down started");
         let baseline = chaos_monkey.baseline;
         // due to a sender pointing to its own receiver, we need to dismantle senders.
         for s in &chaos_monkey.senders {
@@ -82,13 +89,19 @@ impl ChaosMonkeyDriver {
         }
         // drop, wiping out all senders/receivers/machines
         drop(chaos_monkey);
+        let mut start = std::time::Instant::now();
         // wait for the machines to all go away
         loop {
             thread::yield_now();
-            if baseline == executor::get_machine_count() {
+            if baseline >= executor::get_machine_count() {
                 break;
             }
+            if start.elapsed() >= std::time::Duration::from_secs(1) {
+                start = std::time::Instant::now();
+                log::debug!("baseline {}, count {}", baseline, executor::get_machine_count());
+            }
         }
+        log::debug!("chaos_monkey: tear-down complete");
     }
     pub fn run(&self) {
         let range = Uniform::from(0 .. self.senders.len());

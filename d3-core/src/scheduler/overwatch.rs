@@ -11,7 +11,7 @@ pub struct SystemMonitorFactory {
 impl SystemMonitorFactory {
     #[allow(clippy::new_ret_no_self)]
     pub fn new() -> MonitorFactoryObj {
-        let (sender, receiver) = crossbeam::channel::bounded::<MonitorMessage>(MONITOR_QUEUE_MAX);
+        let (sender, receiver) = crossbeam::channel::unbounded::<MonitorMessage>();
         Arc::new(Self { sender, receiver })
     }
 }
@@ -51,9 +51,7 @@ impl MonitorControl for SystemMonitor {
     // add a stats sender to the system monitor
     fn add_sender(&self, sender: CoreStatsSender) { if self.sender.send(MonitorMessage::AddSender(sender)).is_err() {} }
     // remove a stats sender to the system monitor
-    fn remove_sender(&self, sender: CoreStatsSender) {
-        if self.sender.send(MonitorMessage::AddSender(sender)).is_err() {}
-    }
+    fn remove_sender(&self, sender: CoreStatsSender) { if self.sender.send(MonitorMessage::AddSender(sender)).is_err() {} }
 }
 
 // If we haven't done so already, attempt to stop the system monitor thread
@@ -99,7 +97,7 @@ impl ThreadData {
                 Ok(m) => match m {
                     MonitorMessage::Terminate => break,
                     MonitorMessage::Parked(id) => {
-                        log::info!("System Monitor: Executor {} is parked", id);
+                        log::debug!("System Monitor: Executor {} is parked", id);
                         self.executor.parked_executor(id);
                     },
                     MonitorMessage::Terminated(id) => self.executor.joinable_executor(id),
@@ -107,7 +105,7 @@ impl ThreadData {
                     MonitorMessage::RemoveSender(sender) => self.remove_sender(sender),
                     MonitorMessage::ExecutorStats(stats) => self.try_fwd(CoreStatsMessage::ExecutorStats(stats)),
                     MonitorMessage::SchedStats(stats) => self.try_fwd(CoreStatsMessage::SchedStats(stats)),
-
+                    MonitorMessage::MachineInfo(machine) => self.log_machine_info(machine),
                     #[allow(unreachable_patterns)]
                     _ => log::info!("System Monitor recevied an unhandled message {:#?}", m),
                 },
@@ -142,6 +140,7 @@ impl ThreadData {
 
     fn try_fwd(&mut self, msg: CoreStatsMessage) {
         use crossbeam::channel::TrySendError;
+        log::debug!("stats: {:#?}", msg);
         match self.senders.len() {
             0 => (),
             1 => {
@@ -164,6 +163,17 @@ impl ThreadData {
             },
         }
     }
+
+    fn log_machine_info(&self, machine: ShareableMachine) {
+        log::info!(
+            "machine {} key {} state {:#?} q_len {}, disconnected {}",
+            machine.get_id(),
+            machine.get_key(),
+            machine.get_state(),
+            machine.channel_len(),
+            machine.is_disconnected(),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -182,6 +192,10 @@ mod tests {
         fn joinable_executor(&self, _id: usize) {}
         // stop the executor
         fn stop(&self) {}
+        // get the queue
+        fn get_run_queue(&self) -> TaskInjector { panic!("get_run_queue should not be called.") }
+        // request stats from the executors
+        fn request_stats(&self) {}
     }
 
     #[test]

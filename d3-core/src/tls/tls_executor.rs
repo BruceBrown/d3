@@ -6,17 +6,60 @@ use super::*;
 // A Task, actually a task for the executor
 #[doc(hidden)]
 pub struct Task {
+    pub id: usize,
     pub start: Instant,
     pub machine: ShareableMachine,
+    // indicates that a drop is in progress
+    pub drop: bool,
 }
 impl Task {
-    pub fn new(machine: &ShareableMachine) -> Self {
+    pub fn new(machine: &ShareableMachine, drop: bool) -> Self {
+        if !drop {
+            match machine.get_state() {
+                MachineState::RecvBlock => panic!("should not create task for RecvBlock machine"),
+                MachineState::New => panic!("should not create task for New machine"),
+                MachineState::Running => panic!("should not create task for Running machine"),
+                MachineState::Ready => (),
+                _ => panic!("should not create task for ready machine {:#?}", machine.get_state()),
+            }
+        }
+        let id = TASK_ID.fetch_add(1, Ordering::SeqCst);
+        if machine.get_task_id() != 0 {
+            log::error!(
+                "machine {} state {:#?} already on run_q as task {}",
+                machine.get_key(),
+                machine.get_state(),
+                machine.get_task_id()
+            );
+            if !drop {
+                panic!("machine already queued");
+            }
+        }
+        machine.set_task_id(id);
+        log::trace!("adding machine {} to run_q {}", machine.get_key(), id);
         Self {
+            id,
             start: std::time::Instant::now(),
             machine: Arc::clone(machine),
+            drop,
+        }
+    }
+    pub fn is_invalid(&self, executor_id: usize) -> bool {
+        if self.id != self.machine.get_task_id() {
+            log::error!(
+                "exec {}, task_id {} doesn't match machine {} task id {}",
+                executor_id,
+                self.id,
+                self.machine.get_key(),
+                self.machine.get_task_id(),
+            );
+            true
+        } else {
+            false
         }
     }
 }
+static TASK_ID: AtomicUsize = AtomicUsize::new(1);
 
 // A task for the scheduler, which will reschedule the machine
 pub struct SchedTask {
@@ -43,6 +86,9 @@ pub struct ExecutorStats {
     pub exhausted_slice: u128,
     pub recv_time: std::time::Duration,
     pub time_on_queue: std::time::Duration,
+    pub disturbed_nap: u128,
+    pub sleep_count: u128,
+    pub sleep_time: std::time::Duration,
 }
 
 // The state of the executor
@@ -65,48 +111,45 @@ pub enum TrySendError {
     Disconnected,
 }
 
-// Analogous the the ShareableMachine, the SharedCollectiveSenderAdapter encapsulates
-// and adapter containing a wrapped CollectiveSenderAdapter, which encapsulates Sender<T> and T.
+// Analogous the the ShareableMachine, the MachineSenderAdapter encapsulates
+// and adapter containing a wrapped MachineDependentSenderAdapter, which encapsulates Sender<T> and T.
 #[doc(hidden)]
-pub struct SharedCollectiveSenderAdapter {
-    pub id: Uuid,
-    pub key: usize,
-    pub state: MachineState,
+pub struct MachineSenderAdapter {
+    id: Uuid,
+    key: usize,
+    state: SharedMachineState,
     // the normalized_adapter is an ugly trait object, which needs fixing
-    pub normalized_adapter: CommonCollectiveSenderAdapter,
+    normalized_adapter: Box<dyn MachineDependentSenderAdapter>,
 }
-impl SharedCollectiveSenderAdapter {
+impl MachineSenderAdapter {
+    pub fn new(machine: &ShareableMachine, adapter: Box<dyn MachineDependentSenderAdapter>) -> Self {
+        Self {
+            id: machine.get_id(),
+            key: machine.get_key(),
+            state: machine.state.clone(),
+            normalized_adapter: adapter,
+        }
+    }
     // Get the id of the sending machine
     pub const fn get_id(&self) -> Uuid { self.id }
     // Get the key of the sending machine
     pub const fn get_key(&self) -> usize { self.key }
     // Try to send the message
-    pub fn try_send(&mut self) -> Result<(), TrySendError> { self.normalized_adapter.try_send() }
+    pub fn try_send(&mut self) -> Result<usize, TrySendError> { self.normalized_adapter.try_send() }
 }
 
 #[doc(hidden)]
-pub trait CollectiveSenderAdapter {
-    // Get the id of the sending machine
-    fn get_id(&self) -> Uuid;
-    // Get the key of the sending machine
-    fn get_key(&self) -> usize;
-    // Try to send the message
-    fn try_send(&mut self) -> Result<(), TrySendError>;
+pub trait MachineDependentSenderAdapter {
+    fn try_send(&mut self) -> Result<usize, TrySendError>;
 }
-pub type CommonCollectiveSenderAdapter = Box<dyn CollectiveSenderAdapter>;
 
 // This is information that the executor thread shares with the worker, allowing
 // the big executor insight into what the executor is up to.
 #[derive(Debug)]
 pub struct SharedExecutorInfo {
     state: ExecutorState,
-    start_idle: Instant,
 }
 impl SharedExecutorInfo {
-    pub fn set_idle(&mut self) -> Instant {
-        self.start_idle = Instant::now();
-        self.start_idle
-    }
     pub fn set_state(&mut self, new: ExecutorState) { self.state = new }
     pub const fn get_state(&self) -> ExecutorState { self.state }
     pub fn compare_set_state(&mut self, old: ExecutorState, new: ExecutorState) {
@@ -114,29 +157,43 @@ impl SharedExecutorInfo {
             self.state = new
         }
     }
-    pub fn get_state_and_elapsed(&self) -> (ExecutorState, Duration) { (self.state, self.start_idle.elapsed()) }
 }
 impl Default for SharedExecutorInfo {
     fn default() -> Self {
         Self {
             state: ExecutorState::Init,
-            start_idle: Instant::now(),
         }
+    }
+}
+
+use self::scheduler::executor::{EXECUTORS_SNOOZING, RUN_QUEUE_LEN};
+use self::scheduler::setup_teardown::Server;
+use self::scheduler::traits::TaskInjector;
+
+pub fn schedule_machine(machine: &ShareableMachine, run_queue: &TaskInjector) { schedule_task(Task::new(machine, false), run_queue); }
+
+fn schedule_task(task: Task, run_queue: &TaskInjector) {
+    RUN_QUEUE_LEN.fetch_add(1, Ordering::SeqCst);
+    run_queue.push(task);
+    if EXECUTORS_SNOOZING.load(Ordering::SeqCst) != 0 {
+        Server::wake_executor_threads();
     }
 }
 
 // ExecutorData is TLS for the executor. Among other things, it provides bridging
 // for the channel to allow a sender to park, while allowing the executor to continue
-// processing work
+// processing work.
 #[doc(hidden)]
 #[derive(Default)]
 pub struct ExecutorData {
     pub id: usize,
+    pub task_id: usize,
     pub machine: ExecutorDataField,
-    pub blocked_senders: Vec<SharedCollectiveSenderAdapter>,
+    pub blocked_senders: Vec<MachineSenderAdapter>,
     pub last_blocked_send_len: usize,
     pub notifier: ExecutorDataField,
     pub shared_info: Arc<Mutex<SharedExecutorInfo>>,
+    pub run_queue: ExecutorDataField,
 }
 impl ExecutorData {
     pub fn block_or_continue() {
@@ -146,8 +203,17 @@ impl ExecutorData {
             if tls.id == 0 {
                 return;
             }
-            if let ExecutorDataField::Machine(machine) = &tls.machine {
-                if machine.state.get() != CollectiveState::Running {
+            // executor thread can continue if machine is in Running state
+            if let ExecutorDataField::Machine(machine) = &mut tls.machine {
+                if !machine.is_running() {
+                    if !machine.is_send_blocked() {
+                        log::error!(
+                            "block_or_continue: expecting Running or SendBlock, found {:#?}",
+                            machine.get_state()
+                        );
+                    }
+                    // this executor is idle until the send that is in progress completes
+                    // stacking it would transform a bounded queue into an unbounded queue -- so don't stack
                     tls.recursive_block();
                 }
             }
@@ -160,80 +226,136 @@ impl ExecutorData {
         // to pause and drain this executor and then allow the send, that got us
         // here, to continue, having sent the one that blocked it
 
+        if let ExecutorDataField::Machine(machine) = &self.machine {
+            log::debug!(
+                "recursive_block begin exec {}, machine {}, state {:#?}",
+                self.id,
+                machine.get_key(),
+                machine.get_state()
+            );
+        }
+
         // if running, change to drain
         self.shared_info
             .lock()
             .as_mut()
             .unwrap()
             .compare_set_state(ExecutorState::Running, ExecutorState::Drain);
+
         self.drain();
-        let mut mutable = self.shared_info.lock().unwrap();
-        // when drain returns, set back to running and reset idle
-        mutable.compare_set_state(ExecutorState::Drain, ExecutorState::Running);
-        mutable.set_idle();
+        // when drain returns, set back to running
+        self.shared_info
+            .lock()
+            .as_mut()
+            .unwrap()
+            .compare_set_state(ExecutorState::Drain, ExecutorState::Running);
+
+        if let ExecutorDataField::Machine(machine) = &self.machine {
+            log::debug!(
+                "recursive_block end exec {}, machine {}, state {:#?}",
+                self.id,
+                machine.get_key(),
+                machine.get_state()
+            );
+        } else {
+            log::error!("recursive_block end exec {} unable to locate machine", self.id);
+        }
     }
-    pub fn sender_blocked(&mut self, channel_id: usize, adapter: SharedCollectiveSenderAdapter) {
+
+    pub fn sender_blocked(&mut self, channel_id: usize, adapter: MachineSenderAdapter) {
         // we're called from a tls context, ExecutorData is for the current thread.
         // upon return, the executor will return back into the channel send, which will
         // complete the send, which is blocked. Consequently, we need to be careful
         // about maintaining send order on a recursive entry.
-        if adapter.state.get() == CollectiveState::SendBlock {
+        if adapter.state.get() == MachineState::SendBlock {
             // if we are already SendBlock, then there is send looping within the
             // machine, and we need to use caution
-            log::info!(
-                "Executor {} detected recursive send block, this should not happen",
-                self.id
+            log::info!("Executor {} detected recursive send block, this should not happen", self.id);
+            unreachable!("block_or_continue() should be called to prevent entering sender_blocked with a blocked machine")
+        }
+
+        // otherwise we can stack the incomplete send. Depth is a concern.
+        // the sends could be offloaded, however it has the potential to
+        // cause a problem with the afformentioned looping sender.
+        if let ExecutorDataField::Machine(machine) = &self.machine {
+            log::trace!(
+                "executor {} machine {} state {:#?} parking sender {} task_id {}",
+                self.id,
+                machine.get_key(),
+                machine.get_state(),
+                channel_id,
+                self.task_id,
             );
-            unreachable!(
-                "block_or_continue() should be called to prevent entering sender_blocked with a blocked machine"
-            )
-        } else {
-            // otherwise we can stack the incomplete send. Depth is a concern.
-            // the sends could be offloaded, however it has the potential to
-            // cause a problem with the afformentioned looping sender.
-            log::trace!("executor {} parking sender {}", self.id, channel_id);
-            adapter.state.set(CollectiveState::SendBlock);
+
+            if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::SendBlock) {
+                log::error!("sender_block: expected state Running, found machine state {:#?}", state);
+                log::error!(
+                    "sender_block: expected state Running, found adapter state {:#?}",
+                    adapter.state.get()
+                );
+                adapter.state.set(MachineState::SendBlock);
+            }
             self.blocked_senders.push(adapter);
         }
     }
+    #[allow(clippy::cognitive_complexity)]
     fn drain(&mut self) {
         // all we can do at this point is attempt to drain out sender queue
-        let backoff = crossbeam::utils::Backoff::new();
         let (machine_key, machine_state) = match &self.machine {
-            ExecutorDataField::Machine(machine) => (machine.key, machine.state.clone()),
+            ExecutorDataField::Machine(machine) => (machine.get_key(), machine.state.clone()),
             _ => panic!("machine field was not set prior to running"),
         };
+
+        let mut start_len = 0;
+        log::trace!("exec {} drain blocked {}", self.id, start_len);
+        let backoff = LinearBackoff::new();
         while !self.blocked_senders.is_empty() {
-            self.shared_info.lock().as_mut().unwrap().set_idle();
-            let mut still_blocked: Vec<SharedCollectiveSenderAdapter> = Vec::with_capacity(self.blocked_senders.len());
+            if start_len != self.blocked_senders.len() {
+                start_len = self.blocked_senders.len();
+                log::trace!("exec {} drain blocked {}", self.id, start_len);
+            }
+            let mut still_blocked: Vec<MachineSenderAdapter> = Vec::with_capacity(self.blocked_senders.len());
             let mut handled_recursive_sender = false;
             for mut sender in self.blocked_senders.drain(..) {
                 match sender.try_send() {
                     // handle the blocked sender that got us here
-                    Ok(()) if sender.key == machine_key => {
+                    Ok(_receiver_key) if sender.key == machine_key => {
                         backoff.reset();
-                        machine_state.set(CollectiveState::Running);
+                        // log::debug!("drain recursive machine ok state {:#?}", machine_state.get());
+                        if let Err(state) = machine_state.compare_and_exchange(MachineState::SendBlock, MachineState::Running) {
+                            log::error!("drain: expected state Running, found state {:#?}", state);
+                            machine_state.set(MachineState::Running);
+                        }
                         handled_recursive_sender = true;
                     },
                     Err(TrySendError::Disconnected) if sender.key == machine_key => {
                         backoff.reset();
-                        machine_state.set(CollectiveState::Running);
+                        // log::debug!("drain recursive machine disconnected state {:#?}", machine_state.get());
+                        if let Err(state) = machine_state.compare_and_exchange(MachineState::SendBlock, MachineState::Running) {
+                            log::debug!("drain: expected state Running, found state {:#?}", state);
+                            machine_state.set(MachineState::Running);
+                        }
                         handled_recursive_sender = true;
                     },
                     // handle all others
-                    Ok(()) => {
+                    Ok(receiver_key) => {
                         backoff.reset();
                         // let the scheduler know that this machine can now be scheduled
+                        // log::debug!("drain recursive other machine ok state {:#?}", machine_state.get());
                         match &self.notifier {
-                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.key),
+                            ExecutorDataField::Notifier(obj) => {
+                                obj.notify_can_schedule_sender(sender.key);
+                                obj.notify_can_schedule_receiver(receiver_key);
+                            },
                             _ => log::error!("can't notify scheduler!!!"),
                         };
                     },
                     Err(TrySendError::Disconnected) => {
                         backoff.reset();
+                        // log::debug!("drain recursive other machine disconnected state {:#?}", machine_state.get());
                         // let the scheduler know that this machine can now be scheduled
                         match &self.notifier {
-                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule(sender.key),
+                            ExecutorDataField::Notifier(obj) => obj.notify_can_schedule_sender(sender.key),
                             _ => log::error!("can't notify scheduler!!!"),
                         };
                     },
@@ -251,11 +373,7 @@ impl ExecutorData {
             // terminate, we'll keep running.
             if backoff.is_completed() && self.shared_info.lock().unwrap().get_state() != ExecutorState::Parked {
                 // we need to notify the monitor that we're essentially dead.
-                self.shared_info
-                    .lock()
-                    .as_mut()
-                    .unwrap()
-                    .set_state(ExecutorState::Parked);
+                self.shared_info.lock().as_mut().unwrap().set_state(ExecutorState::Parked);
                 match &self.notifier {
                     ExecutorDataField::Notifier(obj) => obj.notify_parked(self.id),
                     _ => log::error!("Executor {} doesn't have a notifier", self.id),
@@ -264,6 +382,32 @@ impl ExecutorData {
             backoff.snooze();
         }
         log::debug!("drained recursive sender, allowing send to continue");
+    }
+
+    pub fn schedule(machine: &ShareableMachine, drop: bool) {
+        tls_executor_data.with(|t| {
+            let tls = t.borrow();
+            if let ExecutorDataField::Machine(tls_machine) = &tls.machine {
+                log::trace!(
+                    "exec {} machine {} is scheduling machine {}",
+                    tls.id,
+                    tls_machine.get_key(),
+                    machine.get_key()
+                );
+            } else {
+                log::trace!("exec {} machine main-thread is scheduling machine {}", tls.id, machine.get_key());
+            }
+            if let ExecutorDataField::RunQueue(run_q) = &tls.run_queue {
+                schedule_task(Task::new(machine, drop), run_q);
+            } else {
+                // gotta do this the hard way
+                if let Ok(run_q) = Server::get_run_queue() {
+                    schedule_task(Task::new(machine, drop), &run_q);
+                } else {
+                    log::debug!("unable to obtain run_queue");
+                }
+            }
+        });
     }
 }
 
@@ -275,6 +419,7 @@ pub enum ExecutorDataField {
     Uninitialized,
     Notifier(ExecutorNotifierObj),
     Machine(ShareableMachine),
+    RunQueue(Arc<crossbeam::deque::Injector<Task>>),
 }
 
 // The trait that allows the executor to perform notifications
@@ -282,7 +427,9 @@ pub trait ExecutorNotifier: Send + Sync + 'static {
     // Send a notificiation that the executor is parked
     fn notify_parked(&self, executor_id: usize);
     // Send a notification that a parked sender is no long parked, and can be scheduled
-    fn notify_can_schedule(&self, machine_key: usize);
+    fn notify_can_schedule_sender(&self, machine_key: usize);
+    // Send a notification that a parked sender's receiver may need to be scheduled
+    fn notify_can_schedule_receiver(&self, machine_key: usize);
 }
 pub type ExecutorNotifierObj = std::sync::Arc<dyn ExecutorNotifier>;
 

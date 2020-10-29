@@ -31,10 +31,7 @@ use super::*;
 // The entry point for configuring the chat producer component. It receives two sets of settings,
 // component specific and the full set. In most cases the specific set is sufficient.
 // In this case, there's very little to do.
-pub fn configure(
-    config: SimpleConfig,
-    _settings: &settings::Settings,
-) -> Result<Option<ComponentSender>, ComponentError> {
+pub fn configure(config: SimpleConfig, _settings: &settings::Settings) -> Result<Option<ComponentSender>, ComponentError> {
     if config.enabled {
         let (_, sender) = executor::connect(ProducerComponent::new());
         Ok(Some(sender))
@@ -52,10 +49,7 @@ impl ProducerComponent {
     fn create_instance(&self, conn_uuid: u128, any_sender: AnySender) {
         if let Ok(session_sender) = Arc::clone(&any_sender).downcast::<Sender<ChatCmd>>() {
             let (_instance, sender) = executor::connect(ChatInstance::new(conn_uuid));
-            send_cmd(
-                &session_sender,
-                ChatCmd::Instance(conn_uuid, sender, "ChatProducer".to_string()),
-            );
+            send_cmd(&session_sender, ChatCmd::Instance(conn_uuid, sender, "ChatProducer".to_string()));
         } else {
             log::warn!("echo producer component received an unknown sender");
         }

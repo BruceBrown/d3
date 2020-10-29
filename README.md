@@ -61,7 +61,7 @@ The main `d3` crate just [re-exports](src/lib.rs) tools from smaller subcrates:
 ### d3-derive
 * [`MachineImpl`](d3-derive), a derive macro for tranforming an enum into a d3 instruction set.
 ### d3-core
-* [`machine_impl](d3-core), a packaged namespace to be used alongside <quote>#[derive(MachineImpl)]</quote>.
+* [`machine_impl`](d3-core), a packaged namespace to be used alongside <quote>#[derive(MachineImpl)]</quote>.
 * [`executor`](d3-core), a packaged namespace to facilitate interacting with the collective.
 ### d3-components
 * [`components`](d3-components), a packaged namespace for managing machines. It is modeled upon a component, coordinator, connector model.
@@ -73,7 +73,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-d3 = "0.1.0"
+d3 = "0.1.2"
 ```
 
 ## Compatibility

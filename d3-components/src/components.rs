@@ -121,7 +121,6 @@ mod tests {
         }
         impl Machine<ComponentCmd> for Controller {
             fn receive(&self, cmd: ComponentCmd) {
-                println!("recv");
                 match cmd {
                     ComponentCmd::NewSession(conn_id, service, sender) => {
                         assert_eq!(conn_id, 12345);
@@ -140,15 +139,7 @@ mod tests {
             }
         }
         // install a simple logger
-        CombinedLogger::init(vec![TermLogger::new(
-            LevelFilter::Error,
-            Config::default(),
-            TerminalMode::Mixed,
-        )])
-        .unwrap();
-        // tweaks for more responsive testing
-        executor::set_selector_maintenance_duration(std::time::Duration::from_millis(20));
-
+        CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).unwrap();
         executor::start_server();
         thread::sleep(std::time::Duration::from_millis(20));
         let (m, component_sender) = executor::connect::<_, ComponentCmd>(Controller::default());

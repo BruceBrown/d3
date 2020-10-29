@@ -1,7 +1,21 @@
 # d3 -- Revision ChangeLog
-Enhanced examples. Re-arranged the folders. Chanced settings values from enum to string.
 
-17-Oct-2020
+## 29-Oct-202 Release to crates.io
+
+| Crate         | Version | Description |
+|--------------:|--------:|:------------|
+| d3 | v0.1.2 | Combined crate, re-exporting d3-derive, d3-core, d3-components |
+| d3-derive | v0.1.2 | MachineImpl derive macro |
+| d3-core | v0.1.2 | Core layer, includes scheduler and executor |
+| d3-components | v0.1.2 | Component layer, includes Network, Settings Coordinator, Component and Connetor |
+
+
+## Clean-up, prepare for combined d3 release, re-implement sched
+* Data shows crossbeam select, while great for a few channels, doesn't scale well into the 1000s; re-implemented sched w/out select.
+* Enhanced examples. Re-arranged the folders. Changed settings values from enum to string.
+* Large re-working of scheduler, executor and channel. The result is a 4x-10x performance improvement within d3-core.
+
+## 17-Oct-2020 Release to crates.io
 problems with README, links, and badges... This forced a new release.
 0.1.1 -- d3-derive released.
 0.1.1 -- d3-core released.

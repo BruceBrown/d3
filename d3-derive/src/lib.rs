@@ -57,7 +57,11 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             type Adapter = #adapter_ident;
             type SenderAdapter = #sender_adapter_ident;
             type InstructionSet = #name;
-            fn park_sender(channel_id: usize, sender: crossbeam::channel::Sender<Self::InstructionSet>, instruction: Self::InstructionSet) -> Result<(),Self::InstructionSet> {
+            fn park_sender(
+                channel_id: usize,
+                receiver_machine: std::sync::Weak<MachineAdapter>,
+                sender: crossbeam::channel::Sender<Self::InstructionSet>,
+                instruction: Self::InstructionSet) -> Result<(),Self::InstructionSet> {
                 //Err(instruction)
                 tls_executor_data.with(|t|{
                     let mut tls = t.borrow_mut();
@@ -66,18 +70,11 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                     else {
                         if let ExecutorDataField::Machine(machine) = &tls.machine {
                            let adapter = #sender_adapter_ident {
-                                id: machine.get_id(),
-                                key: machine.get_key(),
-                                state: machine.state.clone(),
+                                receiver_machine,
                                 sender: sender,
                                 instruction: Some(instruction),
                             };
-                            let shared_adapter = SharedCollectiveSenderAdapter {
-                                id: adapter.id,
-                                key: adapter.key,
-                                state: adapter.state.clone(),
-                                normalized_adapter: Box::new(adapter),
-                            };
+                            let shared_adapter = MachineSenderAdapter::new(machine, Box::new(adapter));
                             tls.sender_blocked(channel_id, shared_adapter);
                         }
                         Ok(())
@@ -95,17 +92,8 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         // such that there is only one owner at a time. Let's see if Arc<> is good enough
         #[doc(hidden)]
         pub struct #adapter_ident {
-            pub machine: std::sync::Arc<dyn Machine<#name>>,
-            pub receiver: Receiver<#name>,
-            pub instruction: crossbeam::atomic::AtomicCell<Option<#name>>,
-        }
-        impl #adapter_ident {
-            fn set_instruction(&self, inst: Option<#name>) {
-                self.instruction.store(inst);
-            }
-            fn take_instruction(&self) -> Option<#name> {
-                self.instruction.take()
-            }
+            machine: std::sync::Arc<dyn Machine<#name>>,
+            receiver: Receiver<#name>,
         }
         impl std::fmt::Debug for #adapter_ident {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -117,80 +105,108 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
         // be used less often.
         //
         impl MachineDependentAdapter for #adapter_ident {
-            fn sel_recv<'b>(&'b self, sel: &mut crossbeam::channel::Select<'b>) -> usize {
-                sel.recv(&self.receiver.receiver)
-            }
-            fn try_recv_task(&self, machine: &ShareableMachine) -> Option<Task> {
-                match self.receiver.receiver.try_recv() {
-                    Err(crossbeam::channel::TryRecvError::Empty) => None,
-                    Err(crossbeam::channel::TryRecvError::Disconnected) => {
-                        machine.state.set(CollectiveState::Disconnected);
-                        let task_adapter = std::sync::Arc::clone(machine);
-                        let task = Task{start: std::time::Instant::now(), machine: task_adapter };
-                        Some(task)
+            fn receive_cmd(&self, machine: &ShareableMachine, once: bool, drop: bool, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
+                stats.tasks_executed += 1;
+                if machine.is_disconnected() {
+                    if let Err(state) = machine.compare_and_exchange_state(MachineState::Ready, MachineState::Running) {
+                        log::error!("exec: disconnected: expected state = Ready, machine {} found {:#?}", machine.get_key(), state);
+                        machine.set_state(MachineState::Running);
                     }
-                    Ok(instruction) => {
-                        machine.state.set(CollectiveState::Ready);
-                        let task_adapter = std::sync::Arc::clone(machine);
-                        self.set_instruction(Some(instruction));
-                        let task = Task{start: std::time::Instant::now(), machine: task_adapter };
-                        Some(task)
+                    if once {
+                        self.machine.connected(machine.get_id());
+                        stats.instructs_sent += 1;
                     }
-                }
-            }
-            fn receive_cmd(&self, state: &MachineState, once: bool, uuid: uuid::Uuid, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
-                if once {
-                    self.machine.connected(uuid);
-                }
-                if state.get() == CollectiveState::Disconnected {
-                    state.set(CollectiveState::Running);
                     self.machine.disconnected();
-                    state.set(CollectiveState::Dead);
+                    stats.instructs_sent += 1;
+                    if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::Dead) {
+                        log::error!("exec: disconnected: expected state = Running, machine {} found {:#?}", machine.get_key(), state);
+                        machine.set_state(MachineState::Dead);
+                    }
                     return
                 }
-                state.set(CollectiveState::Running);
+                if let Err(state) = machine.compare_and_exchange_state(MachineState::Ready, MachineState::Running) {
+                    log::error!("exec: expected state = Ready, machine {} found {:#?}", machine.get_key(), state);
+                    machine.set_state(MachineState::Running);
+                }
                 // while we're running, might as well try to drain the queue, but keep it bounded
                 let start = std::time::Instant::now();
-                let mut cmd = self.take_instruction().unwrap();
-                stats.tasks_executed += 1;
-                loop {
-                    self.machine.receive(cmd);
+                if once {
+                    self.machine.connected(machine.get_id());
                     stats.instructs_sent += 1;
+                }
+                //let mut cmd = self.take_instruction().unwrap();
+                let mut count = 0;
+                //log::trace!("enter chan {}, machine {} q_len {}", self.receiver.get_id(), machine.get_key(), self.receiver.receiver.len());
+                loop {
                     if start.elapsed() > time_slice {
                         stats.exhausted_slice += 1;
-                        break
+                        break;
                     }
-                    if state.get() != CollectiveState::Running { break }
+                    let state = machine.get_state();
+                    if state != MachineState::Running {
+                        log::debug!("exec: no longer running, machine {} state {:#?}", machine.get_key(), state);
+                        break;
+                    }
                     match self.receiver.receiver.try_recv() {
-                        Ok(m) => cmd = m,
-                        Err(crossbeam::channel::TryRecvError::Empty) => break,
+                        Ok(cmd) => {
+                            self.machine.receive(cmd);
+                            stats.instructs_sent += 1;
+                            count += 1;
+                        },
+                        Err(crossbeam::channel::TryRecvError::Empty) => {
+                            if drop {
+                                // treat as disconnected
+                                log::trace!("exec: machine {} disconnected, cleaning up", machine.get_key());
+                                self.machine.disconnected();
+                                stats.instructs_sent += 1;
+                                if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::Dead) {
+                                    log::error!("exec: (drop) expected state = Running, machine {} found {:#?}", machine.get_key(), state);
+                                    machine.set_state(MachineState::Dead);
+                                }
+                            }
+                            break;
+                        },
                         Err(crossbeam::channel::TryRecvError::Disconnected) => {
+                            log::trace!("exec: machine {} disconnected, cleaning up", machine.get_key());
                             self.machine.disconnected();
-                            state.set(CollectiveState::Dead);
-                            break
-                        }
-                    };
+                            stats.instructs_sent += 1;
+                            if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::Dead) {
+                                log::error!("exec: (disconnected) expected state = Running, machine {} found {:#?}", machine.get_key(), state);
+                                machine.set_state(MachineState::Dead);
+                            }
+                            break;
+                        },
+                    }
                 }
+                //log::trace!("exit chan {}, machine {} q_len {}, count {}", self.receiver.get_id(), machine.get_key(), self.receiver.receiver.len(), count);
+            }
+            // determine if channel is empty
+            fn is_channel_empty(&self) -> bool {
+                self.receiver.receiver.is_empty()
+            }
+            // get number of instructions in queue
+            fn channel_len(&self) -> usize {
+                self.receiver.receiver.len()
             }
         }
         #[doc(hidden)]
         pub struct #sender_adapter_ident {
-            pub id: uuid::Uuid,
-            pub key: usize,
-            pub state: MachineState,
-            pub sender: crossbeam::channel::Sender<#name>,
-            pub instruction: Option<#name>,
+            receiver_machine: std::sync::Weak<MachineAdapter>,
+            sender: crossbeam::channel::Sender<#name>,
+            instruction: Option<#name>,
         }
         impl #sender_adapter_ident {
-            fn try_send(&mut self) -> Result<(), TrySendError> {
+            fn try_send(&mut self) -> Result<usize, TrySendError> {
                 let instruction = self.instruction.take().unwrap();
                 match self.sender.try_send(instruction) {
                     Ok(()) => {
-                        self.state.set(CollectiveState::Running);
-                        Ok(())
+                        if let Some(machine) = self.receiver_machine.upgrade() {
+                            Ok(machine.get_key())
+                        } else {
+                            Err(TrySendError::Disconnected)
+                        }
                     },
                     Err(crossbeam::channel::TrySendError::Disconnected(inst)) => {
-                        self.state.set(CollectiveState::Running);
                         self.instruction = Some(inst);
                         Err(TrySendError::Disconnected)
                     },
@@ -202,16 +218,13 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             }
         }
 
-        impl CollectiveSenderAdapter for #sender_adapter_ident {
-            fn get_id(&self) -> uuid::Uuid { self.id }
-            fn get_key(&self) -> usize { self.key }
-            fn try_send(&mut self) -> Result<(), TrySendError> {
+        impl MachineDependentSenderAdapter for #sender_adapter_ident {
+            fn try_send(&mut self) -> Result<usize, TrySendError> {
                 match self.try_send() {
+                    Ok(receiver_key) => {
+                        Ok(receiver_key)
+                    },
                     Err(e) => Err(e),
-                    Ok(()) => {
-                        self.state.set(CollectiveState::Running);
-                        Ok(())
-                   },
                 }
             }
         }
@@ -262,7 +275,6 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                  // wrap the machine dependent bits
                  let adapter = Self {
                      machine, receiver,
-                     instruction: crossbeam::atomic::AtomicCell::new(None),
                  };
                  // wrap the independent and normalize the dependent with a trait object
                  let machine_adapter = MachineAdapter::new(Box::new(adapter));
@@ -277,33 +289,12 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                  // wrap the machine dependent bits
                  let adapter = Self {
                      machine, receiver,
-                     instruction: crossbeam::atomic::AtomicCell::new(None),
                  };
                  // wrap the independent and normalize the dependent with a trait object
                  let machine_adapter = MachineAdapter::new(Box::new(adapter));
                  (sender, machine_adapter)
             }
         }
-
-        // build constructs a instruction specific machine. It is converted
-        // from that into a trait object that can be shared via From. Doing
-        // it here, rather than in build allows for some changes in design
-        // down the road.
-        /*
-        impl From<#adapter_ident> for CommonCollectiveAdapter {
-            fn from(adapter: #adapter_ident) -> Self {
-                std::sync::Arc::new(adapter) as CommonCollectiveAdapter
-            }
-        }
-        */
     };
     TokenStream::from(expanded)
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
 }

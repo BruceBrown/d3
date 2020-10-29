@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rand::distributions::{Distribution, Uniform};
 
@@ -18,14 +18,20 @@ type TestMessageSender = Sender<TestMessage>;
 type TestMessageReceiver = Receiver<TestMessage>;
 
 fn wait_for_notification(receiver: &TestMessageReceiver, messages: usize, duration: Duration) {
-    match receiver.recv_timeout(duration) {
-        Ok(m) => {
-            assert_eq!(m, TestMessage::TestData(messages));
-        },
-        Err(_) => {
+    let start = Instant::now();
+    loop {
+        if start.elapsed() >= duration {
+            log::warn!("run queue len {}", executor::get_run_queue_len());
+            d3::core::executor::stats::request_stats_now();
+            d3::core::executor::stats::request_machine_info();
+            thread::sleep(Duration::from_millis(100));
             panic!("test failed to complete");
-        },
-    };
+        }
+        if let Ok(m) = receiver.recv_timeout(Duration::from_secs(20)) {
+            assert_eq!(m, TestMessage::TestData(messages));
+            break;
+        }
+    }
 }
 
 pub mod chaos_monkey;

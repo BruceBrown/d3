@@ -1,26 +1,21 @@
 use self::traits::*;
 use super::*;
 
-use self::setup_teardown::Server;
-use crossbeam::channel::{ReadyTimeoutError, RecvError, TryRecvError};
+use crossbeam::channel::RecvTimeoutError;
 
-type FnvIndexMap<K, V> = indexmap::IndexMap<K, V, fnv::FnvBuildHasher>;
-type SelIndexMap = FnvIndexMap<usize, usize>;
-type TimeStampedSelIndexMap = FnvIndexMap<usize, (Instant, usize)>;
 type MachineMap = slab::Slab<ShareableMachine>;
 
 // The scheduler is responsible for the life-cycle of a machine.
 //
 // It starts with a machine being built and it being assigned.
 // When it receives messages, the machine is given to the executor
-// as a task. It then returns back to the scheduler to await
-// further instructions, or destroeyed if its channel has closed.
+// as a task, by the sender. If the machine SendBlocks the
+// executor send it back to the scheduler to be re-scheduled.
+// when disconnected, the executor sends it back to the sched
+// to be destroyed.
 //
 // Some thing of note:
-// * Crossbeam Select signals receiver readiness
 // * Crossbeam Deque is the task queue
-// * IndexMap is used for translating select index into machine key
-// * Fnv is the hasher used for IndexMap
 // * Slab is used as a container of machines.
 //
 
@@ -45,14 +40,17 @@ pub fn set_machine_count_estimate(new: usize) { machine_count_estimate.store(new
 /// The selector_maintenance_duration determines how often the selector will yield
 /// for maintanance. It will also yeild when it has accumulated enough debt to warrant yielding.
 #[allow(dead_code, non_upper_case_globals)]
+#[deprecated(since = "0.1.2", note = "select is no longer used by the scheduler")]
 pub static selector_maintenance_duration: AtomicCell<Duration> = AtomicCell::new(Duration::from_millis(500));
 
 /// The get_selector_maintenance_duration function returns the current maintenance duration.
-#[allow(dead_code, non_upper_case_globals)]
+#[allow(dead_code, non_upper_case_globals, deprecated)]
+#[deprecated(since = "0.1.2", note = "select is no longer used by the scheduler")]
 pub fn get_selector_maintenance_duration() -> Duration { selector_maintenance_duration.load() }
 
-/// The get_selector_maintenance_duration function returns the current maintenance duration.
-#[allow(dead_code, non_upper_case_globals)]
+/// The set_selector_maintenance_duration function sets the current maintenance duration.
+#[allow(dead_code, non_upper_case_globals, deprecated)]
+#[deprecated(since = "0.1.2", note = "select is no longer used by the scheduler")]
 pub fn set_selector_maintenance_duration(new: Duration) { selector_maintenance_duration.store(new); }
 
 /// The live_machine_count is the number of machines in the collective.
@@ -67,17 +65,9 @@ pub fn get_machine_count() -> usize { live_machine_count.load(Ordering::SeqCst) 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct SchedStats {
     pub maint_time: Duration,
-    pub new_time: Duration,
-    pub rebuild_time: Duration,
-    pub time_on_queue: Duration,
-    pub resched_time: Duration,
-    pub select_time: Duration,
+    pub add_time: Duration,
+    pub remove_time: Duration,
     pub total_time: Duration,
-    pub empty_select: u64,
-    pub selected_count: u64,
-    pub primary_select_count: u64,
-    pub slow_select_count: u64,
-    pub fast_select_count: u64,
 }
 
 // The default scheduler. It is created by the scheduler factory.
@@ -94,12 +84,7 @@ impl DefaultScheduler {
         self.sender.send(SchedCmd::Stop).unwrap();
     }
     // create the scheduler
-    pub fn new(
-        sender: SchedSender,
-        receiver: SchedReceiver,
-        monitor: MonitorSender,
-        queues: (TaskInjector, SchedTaskInjector),
-    ) -> Self {
+    pub fn new(sender: SchedSender, receiver: SchedReceiver, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Self {
         let wait_queue = Arc::clone(&queues.1);
         let thread = SchedulerThread::spawn(receiver, monitor, queues);
         sender.send(SchedCmd::Start).unwrap();
@@ -113,7 +98,11 @@ impl DefaultScheduler {
 
 impl Scheduler for DefaultScheduler {
     // assign a new machine into the collective
-    fn assign_machine(&self, machine: MachineAdapter) { self.sender.send(SchedCmd::New(machine)).unwrap(); }
+    fn assign_machine(&self, machine: ShareableMachine) { self.sender.send(SchedCmd::New(machine)).unwrap(); }
+    // request stats from the executors
+    fn request_stats(&self) { self.sender.send(SchedCmd::RequestStats).unwrap(); }
+    // request machine info
+    fn request_machine_info(&self) { self.sender.send(SchedCmd::RequestMachineInfo).unwrap(); }
     // stop the scheduler
     fn stop(&self) { self.stop(); }
 }
@@ -156,11 +145,7 @@ struct SchedulerThread {
 }
 impl SchedulerThread {
     // start the scheduler thread and call run()
-    fn spawn(
-        receiver: SchedReceiver,
-        monitor: MonitorSender,
-        queues: (TaskInjector, SchedTaskInjector),
-    ) -> Option<thread::JoinHandle<()>> {
+    fn spawn(receiver: SchedReceiver, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Option<thread::JoinHandle<()>> {
         log::info!("Starting scheduler");
         let thread = std::thread::spawn(move || {
             let mut sched_thread = Self {
@@ -184,16 +169,17 @@ impl SchedulerThread {
         let mut stats_timer = SimpleEventTimer::default();
         let start = Instant::now();
         let mut stats = SchedStats::default();
-        let h = fnv::FnvBuildHasher::default();
-        let mut recv_map = SelIndexMap::with_capacity_and_hasher(get_machine_count_estimate(), h);
         while self.is_running {
-            // wait for some maintenance, which build_select supplies
-            let results = self.build_select(&mut recv_map, &mut stats_timer, &mut stats);
-            let maint_start = Instant::now();
-            for result in results {
-                self.maintenance_result(result, &mut stats);
+            // event check
+            if stats_timer.check() && self.monitor.send(MonitorMessage::SchedStats(stats)).is_err() {
+                log::debug!("failed to send sched stats to mointor");
             }
-            stats.maint_time += maint_start.elapsed();
+            // wait for something to do
+            match self.receiver.recv_timeout(stats_timer.remaining()) {
+                Ok(cmd) => self.maintenance(cmd, &mut stats),
+                Err(RecvTimeoutError::Timeout) => (),
+                Err(RecvTimeoutError::Disconnected) => self.is_running = false,
+            }
         }
         stats.total_time = start.elapsed();
         log::info!("machines remaining: {}", self.machines.len());
@@ -201,317 +187,99 @@ impl SchedulerThread {
         log::info!("completed running schdeuler");
     }
 
-    // maintain the select list, rebuilding when necessary. Most other things
-    // are passed back as results to be processed
-    fn build_select(
-        &mut self,
-        recv_map: &mut SelIndexMap,
-        stats_timer: &mut SimpleEventTimer,
-        stats: &mut SchedStats,
-    ) -> Vec<Result<SchedCmd, crossbeam::channel::RecvError>> {
-        let mut select = self.build_select_from_ready(recv_map, stats);
-        let mut results: Vec<Result<SchedCmd, crossbeam::channel::RecvError>> = Vec::with_capacity(20);
-        // results contains dead machines, unfotunately, this layer can't remove them
-        let mut running = self.is_running;
-        // last index is used to monitor if we're running out of handles in the select
-        let mut last_index: usize = 1;
-        while running && last_index < MAX_SELECT_HANDLES {
-            let select_results = self.selector(&mut select, recv_map, stats_timer, stats);
-            for result in select_results {
-                match result {
-                    Err(e) => {
-                        results.push(Err(e));
-                        running = false;
-                    },
-                    Ok(SchedCmd::Start) => (),
-                    Ok(SchedCmd::Stop) => {
-                        results.push(Ok(SchedCmd::Stop));
-                        running = false;
-                    },
-                    Ok(SchedCmd::New(machine)) => {
-                        results.push(Ok(SchedCmd::New(machine)));
-                        running = false;
-                    },
-                    Ok(SchedCmd::Remove(id)) => {
-                        results.push(Ok(SchedCmd::Remove(id)));
-                        running = false;
-                    },
-                    Ok(SchedCmd::RecvBlock(id, exec_start)) => {
-                        stats.time_on_queue += exec_start.elapsed();
-                        // just extend the select list and update the recv_map for the index
-                        let t = Instant::now();
-                        let machine = self.machines.get(id).unwrap();
-                        machine.state.set(CollectiveState::RecvBlock);
-                        if last_index < MAX_SELECT_HANDLES {
-                            last_index = machine.sel_recv(&mut select);
-                            recv_map.insert(last_index, machine.key);
-                        } else {
-                            running = false;
-                        }
-                        stats.resched_time += t.elapsed();
-                    },
-                    Ok(_) => {
-                        log::info!("scheduer builder received an unhandled cmd");
-                    },
-                }
-            }
-            if !running {
-                log::debug!("build_select is returning");
-            }
-        }
-        results
-    }
-
-    // loop running select. If commands are received, return them as a result.
-    // Otherwise, receive an instruction and crate a task for the machine to
-    // receive it.
-    fn selector(
-        &self,
-        select: &mut crossbeam::channel::Select,
-        recv_map: &mut SelIndexMap,
-        stats_timer: &mut SimpleEventTimer,
-        stats: &mut SchedStats,
-    ) -> Vec<Result<SchedCmd, RecvError>> {
-        log::debug!("selector recv_map has {} entries", recv_map.len());
-        let mut results = SchedResults::new();
-        let h = fnv::FnvBuildHasher::default();
-        let mut fast_recv_map = TimeStampedSelIndexMap::with_capacity_and_hasher(get_machine_count_estimate(), h);
-        let mut fast_select = crossbeam::channel::Select::new();
-        fast_select.recv(&self.receiver);
-        let mut last_index = 0;
-        let worker = crossbeam::deque::Worker::<SchedTask>::new_fifo();
-        loop {
-            if stats_timer.check() && self.monitor.send(MonitorMessage::SchedStats(*stats)).is_err() {}
-            // accumulate results, but don't hold them for too long
-            if results.should_publish() {
-                break;
-            }
-            let start_match = Instant::now();
-            // get machines from the wait queue and setup select for each one
-            let _ = self.wait_queue.steal_batch(&worker);
-            while let Some(task) = worker.pop() {
-                if last_index < MAX_SELECT_HANDLES {
-                    let machine = self.machines.get(task.machine_key).unwrap();
-                    machine.state.set(CollectiveState::RecvBlock);
-                    last_index = machine.sel_recv(&mut fast_select);
-                    fast_recv_map.insert(last_index, (Instant::now(), task.machine_key));
-                } else {
-                    results.push(Ok(SchedCmd::RecvBlock(task.machine_key, Instant::now())))
-                }
-            }
-            // see if any machine's receiver is ready
-            match Self::do_select(&mut fast_select, select, results.timeout()) {
-                Err(ReadyTimeoutError) => {
-                    stats.empty_select += 1;
-                    self.maybe_wake_executor(None);
-                },
-                Ok((is_fast_select, index)) => {
-                    stats.selected_count += 1;
-                    if index == 0 {
-                        stats.primary_select_count += 1;
-                        match self.receiver.try_recv() {
-                            Ok(cmd) => results.push(Ok(cmd)),
-                            Err(TryRecvError::Disconnected) => results.push(Err(RecvError)),
-                            Err(TryRecvError::Empty) => (),
-                        }
-                    } else if is_fast_select {
-                        stats.fast_select_count += 1;
-                        if let Some((_timestamp, key)) = fast_recv_map.get(&index) {
-                            if let Some(machine) = self.machines.get(*key) {
-                                match machine.try_recv_task(machine) {
-                                    None => (),
-                                    Some(task) => self.run_task(task),
-                                }
-                            }
-                            fast_select.remove(index);
-                            fast_recv_map.remove(&index);
-                        } else {
-                            log::error!("recv_map missing value for key {}", index);
-                        }
-                    } else {
-                        stats.slow_select_count += 1;
-                        if let Some(id) = recv_map.get(&index) {
-                            if let Some(machine) = self.machines.get(*id) {
-                                match machine.try_recv_task(machine) {
-                                    None => (),
-                                    Some(task) => self.run_task(task),
-                                }
-                            }
-                            select.remove(index);
-                            recv_map.remove(&index);
-                        } else {
-                            log::error!("recv_map missing value for key {}", index);
-                        }
-                    }
-                },
-            }
-            stats.select_time = start_match.elapsed();
-        }
-        for (_, v) in fast_recv_map {
-            results.push(Ok(SchedCmd::RecvBlock(v.1, v.0)));
-        }
-        let res = results.unwrap();
-        log::debug!("selector returning with {} results", res.len());
-        res
-    }
-
-    // insert a machine into the machines map, this is where the machine.key is set
-    fn insert_machine(&mut self, mut machine: MachineAdapter, stats: &mut SchedStats) {
+    fn maintenance(&mut self, cmd: SchedCmd, stats: &mut SchedStats) {
         let t = Instant::now();
-        machine.state.set(CollectiveState::RecvBlock);
-        let entry = self.machines.vacant_entry();
-        machine.key = entry.key();
-        log::trace!("inserted machine {} key={}", machine.get_id(), machine.key);
-        entry.insert(Arc::new(machine));
-        stats.new_time += t.elapsed();
-        live_machine_count.fetch_add(1, Ordering::SeqCst);
-    }
-    fn maybe_wake_executor(&self, count: Option<usize>) {
-        let in_flight = if let Some(count) = count {
-            count
-        } else {
-            self::executor::RUN_QUEUE_LEN.load(Ordering::SeqCst)
+        match cmd {
+            SchedCmd::Start => (),
+            SchedCmd::Stop => self.is_running = false,
+            SchedCmd::Terminate(_key) => (),
+            SchedCmd::New(machine) => self.insert_machine(machine, stats),
+            SchedCmd::SendComplete(key) => self.schedule_sendblock_machine(key),
+            SchedCmd::Remove(key) => self.remove_machine(key, stats),
+            SchedCmd::RecvBlock(key) => self.schedule_recvblock_machine(key),
+            SchedCmd::RequestStats => if self.monitor.send(MonitorMessage::SchedStats(*stats)).is_err() {},
+            SchedCmd::RequestMachineInfo => self.send_machine_info(),
+            _ => (),
         };
-        if in_flight > 0 {
-            let asleep = self::executor::EXECUTORS_SNOOZING.load(Ordering::SeqCst);
-            if asleep > 0 {
-                // log::debug!("in flight {}, waking {}", in_flight, asleep);
-                Server::wake_executor_threads();
-            }
-        }
+        stats.maint_time += t.elapsed();
     }
-    fn run_task(&self, task: Task) {
-        // it is quite possible that the executors have all gone to sleep.
-        // while we can ask deque if its empty, that's not quite good enough.
-        // Instead, we check if there are executors awake, and if not we'll
-        // wake them.
-        let count = self::executor::RUN_QUEUE_LEN.fetch_add(1, Ordering::SeqCst);
-        self.run_queue.push(task);
-        self.maybe_wake_executor(Some(count + 1));
-    }
-    // create a select list from machines that are ready to receive. As much
-    // as we'd like to clean up dead machines, that would create a data race
-    // between the scheduler and executor.
-    fn build_select_from_ready(
-        &self,
-        recv_map: &mut SelIndexMap,
-        stats: &mut SchedStats,
-    ) -> crossbeam::channel::Select {
+    // insert a machine into the machines map, this is where the machine.key is set
+    fn insert_machine(&mut self, machine: ShareableMachine, stats: &mut SchedStats) {
         let t = Instant::now();
-        let mut sel = crossbeam::channel::Select::new();
-        // the first sel index is always our receiver
-        sel.recv(&self.receiver);
-        recv_map.clear();
+        let entry = self.machines.vacant_entry();
+        log::trace!("inserted machine {} key={}", machine.get_id(), entry.key());
+        machine.key.store(entry.key(), Ordering::SeqCst);
+        entry.insert(Arc::clone(&machine));
 
-        for (_, machine) in self.machines.iter() {
-            if machine.get_state() == CollectiveState::RecvBlock {
-                let idx = machine.sel_recv(&mut sel);
-                recv_map.insert(idx, machine.key);
-            }
+        // Always run a task, on insertion so that the machine gets the one-time
+        // connection notification. Otherwise, it would have to wait for a send.
+        if let Err(state) = machine.compare_and_exchange_state(MachineState::New, MachineState::Ready) {
+            log::error!("insert_machine: expected state New, found state {:#?}", state);
         }
-        stats.rebuild_time += t.elapsed();
-        sel
+        live_machine_count.fetch_add(1, Ordering::SeqCst);
+        schedule_machine(&machine, &self.run_queue);
+        stats.add_time += t.elapsed();
     }
 
-    // process results of a recv on the primary receiver
-    fn maintenance_result(&mut self, result: Result<SchedCmd, RecvError>, stats: &mut SchedStats) {
-        match result {
-            Err(_e) => self.is_running = false,
-            Ok(SchedCmd::Stop) => self.is_running = false,
-            Ok(SchedCmd::New(machine)) => self.insert_machine(machine, stats),
-            Ok(SchedCmd::Remove(id)) => {
-                // Believe it or not, this remove is a huge performance hit to
-                // the scheduler. It results a whole bunch of drops being run.
-                log::trace!("removed machine {}", id);
-                if let Some(machine) = self.machines.get(id) {
-                    self.run_task(Task::new(machine));
-                }
-                self.machines.remove(id);
-            },
-            Ok(_) => log::warn!("scheduler cmd unhandled"),
-        }
-    }
-
-    // get a ready index from 1 of 2 select lists
-    fn do_select(
-        fast: &mut crossbeam::channel::Select,
-        slow: &mut crossbeam::channel::Select,
-        duration: Duration,
-    ) -> Result<(bool, usize), ReadyTimeoutError> {
-        let start = Instant::now();
-        let timeout = duration / 4;
-        loop {
-            match fast.try_ready() {
-                Ok(index) => break Ok((true, index)),
-                _ => match slow.ready_timeout(timeout) {
-                    Ok(index) => break Ok((false, index)),
-                    Err(e) => {
-                        if start.elapsed() >= duration {
-                            break Err(e);
-                        }
-                    },
-                },
-            }
-        }
-    }
-}
-
-// Encapsulation of results and the schedule for delivering them. This
-// is just a little helper class to keep things neater in the selector.
-struct SchedResults {
-    results: Vec<Result<SchedCmd, RecvError>>,
-    epoch: Instant,
-    ready: usize,
-    duration: Duration,
-}
-impl SchedResults {
-    fn new() -> Self {
-        Self {
-            results: Vec::with_capacity(1000),
-            epoch: Instant::now(),
-            ready: 0,
-            duration: get_selector_maintenance_duration(),
-        }
-    }
-
-    // push results onto stack, note time if its the first
-    fn push(&mut self, result: Result<SchedCmd, RecvError>) {
-        if let Ok(SchedCmd::RecvBlock(_, _)) = result {
-            self.ready += 1
-        }
-        if self.results.is_empty() {
-            self.epoch = Instant::now()
-        }
-        self.results.push(result);
-    }
-
-    // publish if there are results, and they've aged long enough
-    fn should_publish(&mut self) -> bool {
-        if self.ready > 0 && self.epoch.elapsed() > Duration::from_millis(50) {
-            true
+    fn remove_machine(&mut self, key: usize, stats: &mut SchedStats) {
+        let t = Instant::now();
+        // Believe it or not, this remove is a huge performance hit to
+        // the scheduler. It results a whole bunch of drops being run.
+        if let Some(machine) = self.machines.get(key) {
+            log::trace!("removed machine {} key={}", machine.get_id(), machine.get_key());
         } else {
-            !self.results.is_empty() && (self.epoch.elapsed() > self.duration || self.results.len() >= 1000)
+            log::warn!("machine key {} not in collective", key);
+            stats.remove_time += t.elapsed();
+            return;
         }
+        self.machines.remove(key);
+        live_machine_count.fetch_sub(1, Ordering::SeqCst);
+        stats.remove_time += t.elapsed();
     }
 
-    // compute a timeout that coincides with should_publish time
-    fn timeout(&self) -> Duration {
-        if self.ready == 0 {
-            Duration::from_millis(20)
-        } else {
-            let e = self.epoch.elapsed();
-            if e >= Duration::from_millis(20) {
-                Duration::from_millis(1)
-            } else {
-                Duration::from_millis(20) - e
+    fn send_machine_info(&self) {
+        for (_, m) in &self.machines {
+            if self.monitor.send(MonitorMessage::MachineInfo(Arc::clone(m))).is_err() {
+                log::debug!("unable to send machine info to monitor");
             }
         }
     }
+    fn run_task(&self, machine: &ShareableMachine) {
+        if let Err(state) = machine.compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready) {
+            if state != MachineState::Ready {
+                log::error!("sched run_task expected RecvBlock or Ready state{:#?}", state);
+            }
+        }
+        schedule_machine(machine, &self.run_queue);
+    }
 
-    // unwrap the object, returning the accumulated results
-    // clippy misunderstands and belives this can be a const fn
-    #[allow(clippy::missing_const_for_fn)]
-    fn unwrap(self) -> Vec<Result<SchedCmd, RecvError>> { self.results }
+    fn schedule_sendblock_machine(&self, key: usize) {
+        // log::trace!("sched SendComplete machine {}", key);
+        let machine = self.machines.get(key).unwrap();
+
+        if let Err(state) = machine.compare_and_exchange_state(MachineState::SendBlock, MachineState::RecvBlock) {
+            log::error!("sched: (SendBlock) expecting state SendBlock, found {:#?}", state);
+            return;
+        }
+        if !machine.is_channel_empty()
+            && machine
+                .compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready)
+                .is_ok()
+        {
+            schedule_machine(machine, &self.run_queue);
+        }
+    }
+
+    fn schedule_recvblock_machine(&self, key: usize) {
+        // log::trace!("sched RecvBlock machine {}", key);
+        let machine = self.machines.get(key).unwrap();
+        if machine
+            .compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready)
+            .is_ok()
+        {
+            schedule_machine(machine, &self.run_queue);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -569,8 +337,7 @@ mod tests {
         <P as MachineImpl>::Adapter: MachineBuilder,
     {
         let channel_max = get_default_channel_capacity();
-        let (machine, sender, collective_adapter) =
-            <<P as MachineImpl>::Adapter as MachineBuilder>::build_raw(machine, channel_max);
+        let (machine, sender, collective_adapter) = <<P as MachineImpl>::Adapter as MachineBuilder>::build_raw(machine, channel_max);
         // let collective_adapter = Arc::new(Mutex::new(collective_adapter));
         // Server::assign_machine(collective_adapter);
         (machine, sender, collective_adapter)
@@ -578,9 +345,6 @@ mod tests {
 
     #[test]
     fn test_scheduler() {
-        // tweaks for more responsive testing
-        set_selector_maintenance_duration(std::time::Duration::from_millis(20));
-
         let (monitor_sender, _monitor_receiver) = crossbeam::channel::unbounded::<MonitorMessage>();
         let (sched_sender, sched_receiver) = crossbeam::channel::unbounded::<SchedCmd>();
         let run_queue = Arc::new(deque::Injector::<Task>::new());
@@ -595,7 +359,9 @@ mod tests {
         // build 5 alice machines
         for _ in 1 ..= 5 {
             let alice = Alice {};
-            let (alice, sender, adapter) = build_machine(alice);
+            let (alice, mut sender, adapter) = build_machine(alice);
+            let adapter = Arc::new(adapter);
+            sender.bind(Arc::downgrade(&adapter));
             senders.push(sender);
             machines.push(alice);
             sched_sender.send(SchedCmd::New(adapter)).unwrap();

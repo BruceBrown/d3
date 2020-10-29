@@ -73,12 +73,7 @@ fn main() {
     let settings = settings::Settings::new().expect("configuration error");
     // initialize the logger
     let level_filter = <log::LevelFilter as FromStr>::from_str(&settings.log_level).unwrap();
-    CombinedLogger::init(vec![TermLogger::new(
-        level_filter,
-        Config::default(),
-        TerminalMode::Mixed,
-    )])
-    .unwrap();
+    CombinedLogger::init(vec![TermLogger::new(level_filter, Config::default(), TerminalMode::Mixed)]).unwrap();
     // ensure we have a log of the settings
     log::warn!("{:?}", settings);
 
@@ -166,15 +161,7 @@ mod tests {
     #[test]
     fn alice() {
         // install a simple logger
-        CombinedLogger::init(vec![TermLogger::new(
-            LevelFilter::Error,
-            Config::default(),
-            TerminalMode::Mixed,
-        )])
-        .unwrap();
-
-        // tweaks for more responsive testing
-        executor::set_selector_maintenance_duration(std::time::Duration::from_millis(20));
+        CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).unwrap();
 
         // get the server running
         executor::start_server();

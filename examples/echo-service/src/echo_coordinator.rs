@@ -58,15 +58,8 @@ impl EchoCoordinator {
         let conn_uuid: u128 = conn_id.try_into().unwrap();
         // create an instance to handle the connection, the EchoInstance has two instruction sets.
         // Wire them both to the same instance.
-        let (instance, sender) =
-            executor::connect::<_, EchoCmd>(EchoInstance::new(conn_uuid, buf_size, self.net_sender.clone()));
-        instance
-            .lock()
-            .unwrap()
-            .my_sender
-            .lock()
-            .unwrap()
-            .replace(sender.clone());
+        let (instance, sender) = executor::connect::<_, EchoCmd>(EchoInstance::new(conn_uuid, buf_size, self.net_sender.clone()));
+        instance.lock().unwrap().my_sender.lock().unwrap().replace(sender.clone());
         // the the other components that there's a new echo session nad how to contact the coordinator
         self.components.iter().for_each(|c| {
             send_cmd(
@@ -194,10 +187,7 @@ impl EchoInstance {
     fn received_bytes(&self, conn_id: NetConnId, bytes: Vec<u8>) {
         let conn_uuid: u128 = conn_id.try_into().unwrap();
         let bytes = Arc::new(bytes);
-        send_cmd(
-            self.consumer.lock().unwrap().as_ref().unwrap(),
-            EchoCmd::NewData(conn_uuid, bytes),
-        );
+        send_cmd(self.consumer.lock().unwrap().as_ref().unwrap(), EchoCmd::NewData(conn_uuid, bytes));
     }
 }
 

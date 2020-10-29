@@ -116,13 +116,7 @@ struct MutableCoordinatorData {
 impl MutableCoordinatorData {
     // create a coordinator it it hasn't already been created. Then ask the compoents to create
     // instances, which the coordinator will assemble.
-    fn create_instance(
-        &mut self,
-        conn_id: NetConnId,
-        buf_size: usize,
-        net_sender: &NetSender,
-        components: &[ComponentInfo],
-    ) {
+    fn create_instance(&mut self, conn_id: NetConnId, buf_size: usize, net_sender: &NetSender, components: &[ComponentInfo]) {
         // create an instance to handle the connection, the ChatInstance has two instruction sets.
         // Wire them both to the same instance.
         // Normally, you'd build a translation to a conn_uuid.
@@ -277,10 +271,7 @@ impl ChatInstance {
     // final removal of the connection, this will cause the consumer and producer to die as well
     fn remove_sink(&self, conn_uuid: u128) {
         // we've come full circle from where we told the consumers that the connection is closed.
-        log::debug!(
-            "coordinator is dropping name, consumer and producer for connection {}",
-            conn_uuid
-        );
+        log::debug!("coordinator is dropping name, consumer and producer for connection {}", conn_uuid);
         let mut mutable = self.mutable.lock().unwrap();
         mutable.names.remove(&conn_uuid);
         mutable.producers.remove(&conn_uuid);
@@ -328,10 +319,7 @@ impl ChatInstance {
         mutable.producers.insert(conn_uuid, sender);
         if !mutable.names.contains_key(&conn_uuid) {
             if let Some(welcome) = self.kv.get(&"name_prompt".to_string()) {
-                send_cmd(
-                    &self.net_sender,
-                    NetCmd::SendBytes(conn_id, welcome.as_bytes().to_vec()),
-                );
+                send_cmd(&self.net_sender, NetCmd::SendBytes(conn_id, welcome.as_bytes().to_vec()));
             }
         }
     }
@@ -364,10 +352,7 @@ impl ChatInstance {
             if name.is_empty() {
                 if let Some(welcome) = self.kv.get(&"name_prompt".to_string()) {
                     let conn_id: usize = conn_uuid.try_into().unwrap();
-                    send_cmd(
-                        &self.net_sender,
-                        NetCmd::SendBytes(conn_id, welcome.as_bytes().to_vec()),
-                    );
+                    send_cmd(&self.net_sender, NetCmd::SendBytes(conn_id, welcome.as_bytes().to_vec()));
                 }
             } else {
                 // otherwise save the name
@@ -385,13 +370,9 @@ impl Machine<ChatCmd> for ChatInstance {
     fn receive(&self, cmd: ChatCmd) {
         // log::trace!("echo instance {:#?}", &cmd);
         match cmd {
-            ChatCmd::Instance(conn_id, sender, component) if component == "ChatConsumer" => {
-                self.add_consumer(conn_id, sender)
-            },
+            ChatCmd::Instance(conn_id, sender, component) if component == "ChatConsumer" => self.add_consumer(conn_id, sender),
             ChatCmd::RemoveSink(conn_id) => self.remove_sink(conn_id),
-            ChatCmd::Instance(conn_id, sender, component) if component == "ChatProducer" => {
-                self.add_producer(conn_id, sender)
-            },
+            ChatCmd::Instance(conn_id, sender, component) if component == "ChatProducer" => self.add_producer(conn_id, sender),
             ChatCmd::NewData(conn_id, bytes) => self.new_data(conn_id, bytes),
             _ => (),
         }

@@ -31,6 +31,8 @@ pub struct DaisyChainDriver {
     receiver: Option<TestMessageReceiver>,
     baseline: usize,
     exepected_message_count: usize,
+    #[default(AtomicUsize::new(1))]
+    iteration: AtomicUsize,
 }
 impl DaisyChainDriver {
     pub fn setup(&mut self) {
@@ -43,7 +45,6 @@ impl DaisyChainDriver {
         self.first_sender = Some(s.clone());
         let mut last_sender = s.clone();
         self.senders.push(s);
-
         for idx in 2 ..= self.machine_count {
             let (_, s) = if self.bound_queue {
                 executor::connect(Forwarder::new(idx))
@@ -57,39 +58,59 @@ impl DaisyChainDriver {
             last_sender = s.clone();
             self.senders.push(s);
         }
-        self.exepected_message_count =
-            self.message_count * (self.forwarding_multiplier.pow((self.machine_count - 1) as u32));
+        self.exepected_message_count = self.message_count * (self.forwarding_multiplier.pow((self.machine_count - 1) as u32));
         if self.forwarding_multiplier > 1 {
-            log::info!("expecting {} messages", self.exepected_message_count);
+            log::info!("daisy_chain: expecting {} messages", self.exepected_message_count);
         }
         // turn the last into a notifier
         let (sender, receiver) = channel();
-        last_sender
-            .send(TestMessage::Notify(sender, self.exepected_message_count))
-            .unwrap();
+        log::info!(
+            "daisy_chain: first in chain is {} final notifier is chan {}, notifier accumulator is chan {}",
+            &self.first_sender.as_ref().unwrap().get_id(),
+            &sender.get_id(),
+            &last_sender.get_id()
+        );
+
+        last_sender.send(TestMessage::Notify(sender, self.exepected_message_count)).unwrap();
+
         self.receiver = Some(receiver);
 
         // wait for the scheduler/executor to get them all assigned
+        log::debug!("daisy_chain: base-line: {}", self.baseline);
         loop {
             thread::yield_now();
             if executor::get_machine_count() >= self.baseline + self.machine_count - 1 {
                 break;
             }
         }
+        log::debug!("daisy_chain: setup complete");
     }
     pub fn teardown(daisy_chain: Self) {
+        log::debug!("daisy_chain: tear-down started");
         let baseline = daisy_chain.baseline;
+        for s in &daisy_chain.senders {
+            s.send(TestMessage::RemoveAllSenders).unwrap();
+        }
         // drop, wiping out all senders/receivers/machines
         drop(daisy_chain);
+        let mut start = std::time::Instant::now();
         // wait for the machines to all go away
         loop {
             thread::yield_now();
-            if baseline == executor::get_machine_count() {
+            if baseline >= executor::get_machine_count() {
                 break;
             }
+            if start.elapsed() >= std::time::Duration::from_secs(1) {
+                start = std::time::Instant::now();
+                log::debug!("baseline {}, count {}", baseline, executor::get_machine_count());
+                d3::core::executor::stats::request_machine_info();
+            }
         }
+        log::debug!("daisy_chain: tear-down complete");
     }
     pub fn run(&self) {
+        // let count = self.iteration.fetch_add(1, Ordering::SeqCst);
+        // log::info!("daisy_chain iteration: {}", count);
         if let Some(sender) = self.first_sender.as_ref() {
             for msg_id in 0 .. self.message_count {
                 sender.send(TestMessage::TestData(msg_id)).unwrap();

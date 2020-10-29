@@ -30,6 +30,7 @@ pub fn bench(c: &mut Criterion) {
     // try to limit the length of test runs
     // group.significance_level(0.1).sample_size(10).measurement_time(Duration::from_secs(30));
     group.significance_level(0.1);
+
     group.bench_function("create_destroy_2000_machines", |b| b.iter(create_destroy_2000_machines));
 
     let mut fanout_fanin = FanoutFaninDriver::default();
@@ -44,12 +45,14 @@ pub fn bench(c: &mut Criterion) {
     FanoutFaninDriver::teardown(fanout_fanin);
 
     let mut daisy_chain = DaisyChainDriver::default();
+    daisy_chain.duration = Duration::from_secs(30);
     daisy_chain.setup();
     group.bench_function("daisy_chain_bound", |b| b.iter(|| daisy_chain.run()));
     DaisyChainDriver::teardown(daisy_chain);
 
     let mut daisy_chain = DaisyChainDriver::default();
     daisy_chain.bound_queue = false;
+    daisy_chain.duration = Duration::from_secs(30);
     daisy_chain.setup();
     group.bench_function("daisy_chain_unbound", |b| b.iter(|| daisy_chain.run()));
     DaisyChainDriver::teardown(daisy_chain);
@@ -64,7 +67,6 @@ pub fn bench(c: &mut Criterion) {
     chaos_monkey.setup();
     group.bench_function("chaos_monkey_unbound", |b| b.iter(|| chaos_monkey.run()));
     ChaosMonkeyDriver::teardown(chaos_monkey);
-
     group.finish();
     teardown();
 }
@@ -89,15 +91,9 @@ criterion_group!(benches, bench);
 criterion_main!(benches);
 
 fn setup() {
-    // use simplelog::*;
+    use simplelog::*;
     // install a simple logger
-    // CombinedLogger::init(vec![TermLogger::new(
-    // LevelFilter::Debug,
-    // Config::default(),
-    // TerminalMode::Mixed,
-    // )])
-    // .unwrap();
-    // executor::set_selector_maintenance_duration(Duration::from_millis(20));
+    CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).unwrap();
     executor::set_machine_count_estimate(5000);
     executor::set_default_channel_capacity(500);
     executor::start_server();
@@ -131,10 +127,15 @@ fn create_destroy_2000_machines() {
         let (_, _) = executor::connect(alice);
     }
     // wait for the scheduler/executor to fully drop them
+    let mut start = std::time::Instant::now();
     loop {
         thread::yield_now();
         if 0 == executor::get_machine_count() {
             break;
+        }
+        if start.elapsed() >= std::time::Duration::from_secs(1) {
+            start = std::time::Instant::now();
+            log::debug!("baseline 0, count {}", executor::get_machine_count());
         }
     }
 }

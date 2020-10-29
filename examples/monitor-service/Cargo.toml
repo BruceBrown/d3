@@ -21,4 +21,4 @@ exclude = ["/ci/*", "/bors.toml"]
 [dependencies]
 
 log = "0.4"
-d3 = {version = "0.1.0", path = "../../../d3"}
+d3 = {version = "0.1.2", path = "../../../d3"}

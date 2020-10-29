@@ -34,6 +34,8 @@ pub struct ForwarderMutable {
     #[default(Uniform::from(0..1))]
     range: Uniform<usize>,
     rng: rand::rngs::OsRng,
+    // for TestData, this is the next in sequence
+    next_seq: usize,
 }
 impl ForwarderMutable {
     /// get an index suitable for obtaining a random sender from the senders vector
@@ -45,12 +47,7 @@ impl ForwarderMutable {
 }
 
 impl Forwarder {
-    pub fn new(id: usize) -> Self {
-        Self {
-            id,
-            ..Default::default()
-        }
-    }
+    pub fn new(id: usize) -> Self { Self { id, ..Default::default() } }
     pub const fn get_id(&self) -> usize { self.id }
     pub fn get_and_clear_received_count(&self) -> usize {
         let received_count = self.received_count.load(Ordering::SeqCst);
@@ -90,8 +87,25 @@ impl Machine<TestMessage> for Forwarder {
             },
             _ => (),
         }
-        self.received_count.fetch_add(1, Ordering::SeqCst);
-        // forward the message
+        // account for zero-based counter
+        let count = self.received_count.fetch_add(1, Ordering::SeqCst) + 1;
+
+        // if count == 100 {
+        // log::info!("fwd {} recv {}", self.get_id(), count);
+        // self.received_count.store(0, Ordering::SeqCst);
+        // }
+
+        // validate the TestData sequence is not out of sequence
+        if let TestMessage::TestData(seq) = message {
+            if seq == 0 {
+                mutable.next_seq = 1;
+            } else {
+                assert_eq!(seq, mutable.next_seq);
+                mutable.next_seq += 1;
+            }
+        }
+
+        // we're going to end up doing partial moves, so operate on a clone
         match message {
             TestMessage::ChaosMonkey { .. } if message.can_advance() => {
                 let idx = mutable.get_monkey_fwd();
@@ -102,7 +116,7 @@ impl Machine<TestMessage> for Forwarder {
                     notifier.send(TestMessage::TestData(0)).unwrap();
                 }
             },
-            TestMessage::TestData(_seq) => mutable.senders.iter().for_each(|sender| {
+            TestMessage::TestData(_) => mutable.senders.iter().for_each(|sender| {
                 for _ in 0 .. mutable.forwarding_multiplier {
                     let count = self.send_count.fetch_add(1, Ordering::SeqCst);
                     sender.send(TestMessage::TestData(count)).unwrap()
@@ -119,11 +133,13 @@ impl Machine<TestMessage> for Forwarder {
             }),
         };
         // send notification if we've met the criteria
-        if self.received_count.load(Ordering::SeqCst) == mutable.notify_count {
+        // if mutable.notify_count != 0 {
+        // log::debug!("received {} out of {}", count, mutable.notify_count);
+        //}
+        if count == mutable.notify_count {
+            // log::trace!("received {} out of {}", count, mutable.notify_count);
             if let Some(notifier) = mutable.notify_sender.as_ref() {
-                notifier
-                    .send(TestMessage::TestData(self.received_count.load(Ordering::SeqCst)))
-                    .expect("failed to notify");
+                notifier.send(TestMessage::TestData(count)).expect("failed to notify");
                 self.received_count.store(0, Ordering::SeqCst);
                 self.send_count.store(0, Ordering::SeqCst);
             }

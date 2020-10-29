@@ -4,7 +4,7 @@ name = "d3-core"
 # - Update CHANGELOG.md
 # - Update README.md
 # - Create "d3-X.Y.Z" git tag
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -26,11 +26,9 @@ atomic_refcell = "0.1"
 log = "0.4"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 slab = "0.4"
-indexmap = "1.6"
-fnv = "1.0"
 num_cpus = "1.13"
 
-d3-derive = {version = "0.1.1", path = "../d3-derive"}
+d3-derive = {version = "0.1.2", path = "../d3-derive"}
 
 [dev-dependencies]
 simplelog = "0.8"

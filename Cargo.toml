@@ -4,7 +4,7 @@ name = "d3"
 # - Update CHANGELOG.md
 # - Update README.md
 # - Create "d3-X.Y.Z" git tag
-version = "0.1.0"
+version = "0.1.2"
 authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -51,10 +51,12 @@ log = "0.4"
 simplelog = "0.8"
 rand = "0.7"
 
-d3-core = {version = "0.1.1", path = "./d3-core"}
-d3-derive = {version = "0.1.1", path = "./d3-derive"}
-d3-components =  {version = "0.1.0", path = "./d3-components"}
+d3-core = {version = "0.1.2", path = "./d3-core"}
+d3-derive = {version = "0.1.2", path = "./d3-derive"}
+d3-components =  {version = "0.1.2", path = "./d3-components"}
 
+[patch.crates-io]
+# Add patches here
 
 [dev-dependencies]
 

@@ -24,6 +24,6 @@ smart-default = "0.6"
 rand = "0.7"
 log = "0.4"
 
-d3 = {version = "0.1.0", path = "../."}
-d3-dev-instruction-sets = {version = "0.1.0", path = "../d3-dev-instruction-sets"}
+d3 = {version = "0.1.2", path = "../."}
+d3-dev-instruction-sets = {path = "../d3-dev-instruction-sets"}
 

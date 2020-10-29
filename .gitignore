@@ -15,3 +15,9 @@ package-lock.json
 
 **/.DS_STORE
 .vscode
+
+# these kind of files as well
+**/foo.*
+**/bar.*
+**/xxx.*
+**/yyy.*

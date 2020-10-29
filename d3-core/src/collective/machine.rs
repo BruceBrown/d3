@@ -28,10 +28,7 @@ pub trait MachineBuilder {
         <Self as MachineBuilder>::InstructionSet: Send;
 
     // add an instruction set
-    fn build_addition<T>(
-        machine: &Arc<Mutex<T>>,
-        channel_capacity: usize,
-    ) -> (Sender<Self::InstructionSet>, MachineAdapter)
+    fn build_addition<T>(machine: &Arc<Mutex<T>>, channel_capacity: usize) -> (Sender<Self::InstructionSet>, MachineAdapter)
     where
         T: 'static + Machine<Self::InstructionSet>;
 
@@ -48,18 +45,14 @@ pub trait MachineBuilder {
         <Self as MachineBuilder>::InstructionSet: Send;
     // common building, both build() and build_unbounded() should call into build_common()
     fn build_common<T>(
-        raw: T,
-        s: Sender<Self::InstructionSet>,
-        r: Receiver<Self::InstructionSet>,
+        raw: T, s: Sender<Self::InstructionSet>, r: Receiver<Self::InstructionSet>,
     ) -> (Arc<Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
     where
         T: 'static + Machine<Self::InstructionSet>,
         <Self as MachineBuilder>::InstructionSet: Send;
 
     fn build_addition_common<T>(
-        machine: &Arc<Mutex<T>>,
-        sender: Sender<Self::InstructionSet>,
-        receiver: Receiver<Self::InstructionSet>,
+        machine: &Arc<Mutex<T>>, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>,
     ) -> (Sender<Self::InstructionSet>, MachineAdapter)
     where
         T: 'static + Machine<Self::InstructionSet>;

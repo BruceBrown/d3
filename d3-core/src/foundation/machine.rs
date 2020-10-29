@@ -35,9 +35,8 @@ pub trait MachineImpl: 'static + Send + Sync {
     // Park a sender. If the sender can't be parked, the instruction
     // is returned.
     fn park_sender(
-        channel_id: usize,
-        sender: crossbeam::channel::Sender<Self::InstructionSet>,
-        instruction: Self::InstructionSet,
+        channel_id: usize, receiver_machine: Weak<self::tls::collective::MachineAdapter>,
+        sender: crossbeam::channel::Sender<Self::InstructionSet>, instruction: Self::InstructionSet,
     ) -> Result<(), Self::InstructionSet>;
 }
 
@@ -67,7 +66,34 @@ where
     T: Machine<P>,
     P: MachineImpl,
 {
-    fn receive(&self, cmd: P) { self.lock().unwrap().receive(cmd); }
-    fn disconnected(&self) { self.lock().unwrap().disconnected(); }
-    fn connected(&self, uuid: Uuid) { self.lock().unwrap().connected(uuid); }
+    // fn receive(&self, cmd: P) { self.lock().unwrap().receive(cmd); }
+    // fn disconnected(&self) { self.lock().unwrap().disconnected(); }
+    // fn connected(&self, uuid: Uuid) { self.lock().unwrap().connected(uuid); }
+
+    fn receive(&self, cmd: P) {
+        let mut lock = self.try_lock();
+        if let Ok(ref mut mutex) = lock {
+            (*mutex).receive(cmd);
+        } else {
+            log::error!("try_lock failed for receive");
+        }
+    }
+
+    fn disconnected(&self) {
+        let mut lock = self.try_lock();
+        if let Ok(ref mut mutex) = lock {
+            (*mutex).disconnected();
+        } else {
+            log::error!("try_lock failed for disconnected");
+        }
+    }
+
+    fn connected(&self, uuid: Uuid) {
+        let mut lock = self.try_lock();
+        if let Ok(ref mut mutex) = lock {
+            (*mutex).connected(uuid);
+        } else {
+            log::error!("try_lock failed for connected");
+        }
+    }
 }

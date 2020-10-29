@@ -10,10 +10,7 @@ use monitor_service::monitor;
 /// The idea being that they have an understanding of what's needed and can
 /// call upon components to create instances.
 
-pub fn configure(
-    settings: &settings::Settings,
-    components: &[ComponentInfo],
-) -> Result<Vec<CoordinatorInfo>, ComponentError> {
+pub fn configure(settings: &settings::Settings, components: &[ComponentInfo]) -> Result<Vec<CoordinatorInfo>, ComponentError> {
     let mut active_coordinators: Vec<CoordinatorInfo> = Vec::new();
     for c in &settings.coordinator {
         // c is the coordinator HashMap

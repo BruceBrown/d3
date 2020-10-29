@@ -22,7 +22,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-d3-derive = "0.1.1"
+d3-derive = "0.1.2"
 ```
 
 ## Example

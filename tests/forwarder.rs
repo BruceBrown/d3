@@ -6,9 +6,10 @@ extern crate test;
 #[cfg(test)]
 mod tests {
     use std::panic;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::thread;
     use std::time::Duration;
+
+    // use simplelog::*;
 
     use d3::core::executor::{self, *};
     use d3::core::machine_impl::*;
@@ -19,35 +20,36 @@ mod tests {
     use d3_test_drivers::fanout_fanin::FanoutFaninDriver;
     use d3_test_drivers::forwarder::Forwarder;
 
-    static BARRIER: AtomicUsize = AtomicUsize::new(0);
     // common function for wrapping a test with setup/teardown logic
     pub fn run_test<T>(test: T)
     where
         T: FnOnce() + panic::UnwindSafe,
     {
-        let backoff = crossbeam::utils::Backoff::new();
-        loop {
-            if 0 == BARRIER.fetch_add(1, Ordering::SeqCst) {
-                break;
-            }
-            backoff.snooze();
-        }
+        // install a simple logger
+        // CombinedLogger::init(vec![TermLogger::new(
+        // LevelFilter::Debug,
+        // Config::default(),
+        // TerminalMode::Mixed,
+        // )])
+        // .unwrap();
         // tweaks for more responsive testing
-        executor::set_selector_maintenance_duration(std::time::Duration::from_millis(20));
+        // executor::set_selector_maintenance_duration(std::time::Duration::from_millis(20));
+        executor::set_machine_count_estimate(5000);
+        executor::set_default_channel_capacity(500);
         setup();
         let result = panic::catch_unwind(|| test());
         teardown();
         assert!(result.is_ok())
     }
     fn setup() {
-        info!("starting server");
+        info!("setup starting server");
         executor::start_server()
     }
     fn teardown() {
-        info!("stopping server");
+        info!("teardown stopping server");
         executor::stop_server();
         std::thread::sleep(std::time::Duration::from_millis(50));
-        BARRIER.store(0, Ordering::SeqCst);
+        // BARRIER.store(0, Ordering::SeqCst);
     }
 
     #[test]
@@ -118,7 +120,7 @@ mod tests {
             let mut data = TestStruct::default();
             data.from_id = 10000;
             s.send(TestMessage::TestCallback(sender, data)).unwrap();
-            let m = r.recv_timeout(Duration::from_secs(1)).unwrap();
+            let m = r.recv_timeout(Duration::from_secs(1)).expect("data didn't arrive");
             match m {
                 TestMessage::TestStruct(results) => {
                     assert_eq!(results.from_id, data.from_id);
@@ -181,27 +183,30 @@ mod tests {
 
     #[test]
     fn daisy_chain() {
-        // Previous tests was a proff of functionality. Now, we're going to stress things.
+        // Previous tests was a proof of functionality. Now, we're going to stress things.
         run_test(|| {
             let mut daisy_chain = DaisyChainDriver::default();
             daisy_chain.machine_count = 1000;
             daisy_chain.message_count = 10;
-
+            daisy_chain.duration = Duration::from_secs(60);
             let iterations = 2;
             daisy_chain.setup();
+            log::info!("starting run");
+            let start = std::time::Instant::now();
             for _ in 0 .. iterations {
                 daisy_chain.run();
             }
+            log::info!("completed, duration {:#?}", start.elapsed());
             DaisyChainDriver::teardown(daisy_chain);
         });
     }
 
     #[test]
-    fn daisy_chain_multiplier() {
+    fn multiplier() {
         // Previous tests was a proff of functionality. Now, we're going to stress things.
         run_test(|| {
             let mut daisy_chain = DaisyChainDriver::default();
-            daisy_chain.machine_count = 6;
+            daisy_chain.machine_count = 5;
             daisy_chain.message_count = 1;
             daisy_chain.forwarding_multiplier = 4;
             daisy_chain.duration = Duration::from_secs(15);
@@ -218,9 +223,11 @@ mod tests {
     fn fanout_fanin() {
         run_test(|| {
             let mut fanout_fanin = FanoutFaninDriver::default();
-            fanout_fanin.machine_count = 200;
-            fanout_fanin.message_count = 5;
-            let iterations = 2;
+            // fanout_fanin.machine_count = 200;
+            // fanout_fanin.message_count = 5;
+            fanout_fanin.bound_queue = false;
+            fanout_fanin.duration = std::time::Duration::from_secs(2);
+            let iterations = 600;
             fanout_fanin.setup();
             for _ in 0 .. iterations {
                 fanout_fanin.run();
@@ -236,11 +243,16 @@ mod tests {
             chaos_monkey.machine_count = 1000;
             chaos_monkey.message_count = 50;
             chaos_monkey.inflection_value = 19;
-            let iterations = 2;
+            chaos_monkey.bound_queue = false;
+            chaos_monkey.duration = std::time::Duration::from_secs(30);
+            let iterations = 10;
             chaos_monkey.setup();
+            log::info!("starting run");
+            let start = std::time::Instant::now();
             for _ in 0 .. iterations {
                 chaos_monkey.run();
             }
+            log::info!("completed, duration {:#?}", start.elapsed());
             ChaosMonkeyDriver::teardown(chaos_monkey);
         });
     }
