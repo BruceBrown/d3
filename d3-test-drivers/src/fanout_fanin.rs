@@ -30,8 +30,9 @@ pub struct FanoutFaninDriver {
     #[default(AtomicUsize::new(1))]
     iteration: AtomicUsize,
 }
-impl FanoutFaninDriver {
-    pub fn setup(&mut self) {
+impl TestDriver for FanoutFaninDriver {
+    // setup the machines
+    fn setup(&mut self) {
         self.baseline = executor::get_machine_count();
         let (_, fanout_sender) = if self.bound_queue {
             executor::connect(Forwarder::new(1))
@@ -49,10 +50,10 @@ impl FanoutFaninDriver {
             } else {
                 executor::connect_unbounded(Forwarder::new(idx))
             };
-            fanout_sender.send(TestMessage::AddSender(s.clone())).unwrap();
             s.send(TestMessage::AddSender(fanin_sender.clone())).unwrap();
             self.senders.push(s);
         }
+        fanout_sender.send(TestMessage::AddSenders(self.senders.clone())).unwrap();
         log::debug!("fanout chan {} fanin {}", fanout_sender.get_id(), fanin_sender.get_id());
         self.fanout_sender = Some(fanout_sender);
         // turn the fanin into a notifier
@@ -62,16 +63,14 @@ impl FanoutFaninDriver {
         fanin_sender.send(TestMessage::Notify(sender, expect_count)).unwrap();
 
         // wait for the scheduler/executor to get them all assigned
-        log::debug!("fanout_fanin: base-line: {}", self.baseline);
-        loop {
-            thread::yield_now();
-            if executor::get_machine_count() >= self.baseline + self.machine_count - 1 {
-                break;
-            }
+        if wait_for_machine_setup(self.baseline + self.machine_count - 1).is_err() {
+            panic!("fanout_fanin: machine setup failed");
         }
         log::debug!("fanout_fanin: setup complete");
     }
-    pub fn teardown(fanout_fanin: Self) {
+
+    // tear down the machines
+    fn teardown(fanout_fanin: Self) {
         log::debug!("fanout_fanin: tear-down started");
         let baseline = fanout_fanin.baseline;
         for s in &fanout_fanin.senders {
@@ -79,21 +78,16 @@ impl FanoutFaninDriver {
         }
         // drop, wiping out all senders/receivers/machines
         drop(fanout_fanin);
-        let mut start = std::time::Instant::now();
+
         // wait for the machines to all go away
-        loop {
-            thread::yield_now();
-            if baseline >= executor::get_machine_count() {
-                break;
-            }
-            if start.elapsed() >= std::time::Duration::from_secs(1) {
-                start = std::time::Instant::now();
-                log::debug!("baseline {}, count {}", baseline, executor::get_machine_count());
-            }
+        if wait_for_machine_teardown(baseline).is_err() {
+            panic!("fanout_fanin: machine tear-down failed");
         }
         log::debug!("fanout_fanin: tear-down complete");
     }
-    pub fn run(&self) {
+
+    // run a single iteration
+    fn run(&self) {
         // let count = self.iteration.fetch_add(1, Ordering::SeqCst);
         // log::info!("fanout_fanin iteration: {}", count);
         if let Some(sender) = self.fanout_sender.as_ref() {
@@ -102,7 +96,9 @@ impl FanoutFaninDriver {
             }
             if let Some(receiver) = self.receiver.as_ref() {
                 let expect_count = (self.machine_count - 2) * self.message_count;
-                wait_for_notification(receiver, expect_count, self.duration);
+                if wait_for_notification(receiver, expect_count, self.duration).is_err() {
+                    panic!("fanout_fanin: completion notification failed");
+                }
             }
         }
     }

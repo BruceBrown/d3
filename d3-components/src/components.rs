@@ -154,7 +154,7 @@ mod tests {
             .is_err()
         {}
         thread::sleep(std::time::Duration::from_millis(50));
-        assert_eq!(m.lock().unwrap().counter.load(), 1);
+        assert_eq!(m.lock().counter.load(), 1);
         executor::stop_server();
     }
 }

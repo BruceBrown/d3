@@ -126,22 +126,27 @@ pub fn request_stats_now() { Server::request_stats(); }
 /// Request machine_info will request the scheduler to send machine information
 pub fn request_machine_info() { Server::request_machine_info(); }
 
+// attempt state transition
+fn wait_for_ownership(curr: ServerState, new: ServerState, duration: Duration) -> Result<(), ()> {
+    let start = Instant::now();
+    while start.elapsed() < duration {
+        if curr == server_state.compare_and_swap(curr, new) {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_nanos(50));
+    }
+    Err(())
+}
+
 /// The start_server function starts the server, putting it in a state where it can create machines
 /// that are connected to the collective.
 pub fn start_server() {
     log::info!("starting server");
-    let mut start = std::time::Instant::now();
-    loop {
-        let state = server_state.compare_and_swap(ServerState::Stopped, ServerState::Initializing);
-        if state == ServerState::Stopped {
-            break;
-        }
-        thread::sleep(std::time::Duration::from_millis(50));
-        if start.elapsed() > std::time::Duration::from_secs(120) {
-            log::error!("force stopping server");
-            stop_server();
-            start = std::time::Instant::now();
-        }
+    // tests sometimes run in parallel, even with --jobs 1, so we wait
+    let res = wait_for_ownership(ServerState::Stopped, ServerState::Initializing, Duration::from_secs(5));
+    if res.is_err() {
+        log::error!("force stopping server, current state is {:#?}", server_state.load());
+        stop_server();
     }
     log::info!("aquired server");
     if get_executor_count() == 0 {

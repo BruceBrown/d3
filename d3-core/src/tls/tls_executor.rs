@@ -238,16 +238,12 @@ impl ExecutorData {
         // if running, change to drain
         self.shared_info
             .lock()
-            .as_mut()
-            .unwrap()
             .compare_set_state(ExecutorState::Running, ExecutorState::Drain);
 
         self.drain();
         // when drain returns, set back to running
         self.shared_info
             .lock()
-            .as_mut()
-            .unwrap()
             .compare_set_state(ExecutorState::Drain, ExecutorState::Running);
 
         if let ExecutorDataField::Machine(machine) = &self.machine {
@@ -298,8 +294,9 @@ impl ExecutorData {
             self.blocked_senders.push(adapter);
         }
     }
-    #[allow(clippy::cognitive_complexity)]
+
     fn drain(&mut self) {
+        use MachineState::*;
         // all we can do at this point is attempt to drain out sender queue
         let (machine_key, machine_state) = match &self.machine {
             ExecutorDataField::Machine(machine) => (machine.get_key(), machine.state.clone()),
@@ -322,18 +319,18 @@ impl ExecutorData {
                     Ok(_receiver_key) if sender.key == machine_key => {
                         backoff.reset();
                         // log::debug!("drain recursive machine ok state {:#?}", machine_state.get());
-                        if let Err(state) = machine_state.compare_and_exchange(MachineState::SendBlock, MachineState::Running) {
+                        if let Err(state) = machine_state.compare_and_exchange(SendBlock, Running) {
                             log::error!("drain: expected state Running, found state {:#?}", state);
-                            machine_state.set(MachineState::Running);
+                            machine_state.set(Running);
                         }
                         handled_recursive_sender = true;
                     },
                     Err(TrySendError::Disconnected) if sender.key == machine_key => {
                         backoff.reset();
                         // log::debug!("drain recursive machine disconnected state {:#?}", machine_state.get());
-                        if let Err(state) = machine_state.compare_and_exchange(MachineState::SendBlock, MachineState::Running) {
+                        if let Err(state) = machine_state.compare_and_exchange(SendBlock, Running) {
                             log::debug!("drain: expected state Running, found state {:#?}", state);
-                            machine_state.set(MachineState::Running);
+                            machine_state.set(Running);
                         }
                         handled_recursive_sender = true;
                     },
@@ -371,9 +368,9 @@ impl ExecutorData {
             // if we haven't worked out way free, then we need to notify that we're kinda stuck
             // even though we've done that, we may yet come free. As long as we're not told to
             // terminate, we'll keep running.
-            if backoff.is_completed() && self.shared_info.lock().unwrap().get_state() != ExecutorState::Parked {
+            if backoff.is_completed() && self.shared_info.lock().get_state() != ExecutorState::Parked {
                 // we need to notify the monitor that we're essentially dead.
-                self.shared_info.lock().as_mut().unwrap().set_state(ExecutorState::Parked);
+                self.shared_info.lock().set_state(ExecutorState::Parked);
                 match &self.notifier {
                     ExecutorDataField::Notifier(obj) => obj.notify_parked(self.id),
                     _ => log::error!("Executor {} doesn't have a notifier", self.id),
@@ -387,15 +384,17 @@ impl ExecutorData {
     pub fn schedule(machine: &ShareableMachine, drop: bool) {
         tls_executor_data.with(|t| {
             let tls = t.borrow();
-            if let ExecutorDataField::Machine(tls_machine) = &tls.machine {
-                log::trace!(
-                    "exec {} machine {} is scheduling machine {}",
-                    tls.id,
-                    tls_machine.get_key(),
-                    machine.get_key()
-                );
-            } else {
-                log::trace!("exec {} machine main-thread is scheduling machine {}", tls.id, machine.get_key());
+            if log_enabled!(log::Level::Trace) {
+                if let ExecutorDataField::Machine(tls_machine) = &tls.machine {
+                    log::trace!(
+                        "exec {} machine {} is scheduling machine {}",
+                        tls.id,
+                        tls_machine.get_key(),
+                        machine.get_key()
+                    );
+                } else {
+                    log::trace!("exec {} machine main-thread is scheduling machine {}", tls.id, machine.get_key());
+                }
             }
             if let ExecutorDataField::RunQueue(run_q) = &tls.run_queue {
                 schedule_task(Task::new(machine, drop), run_q);

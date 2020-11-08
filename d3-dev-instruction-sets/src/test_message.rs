@@ -6,7 +6,8 @@ use super::*;
 /// # examples
 ///
 /// ```
-/// # #[allow(unused_imports)] use std::sync::{Arc, Mutex};
+/// # #[allow(unused_imports)] use std::sync::Arc;
+/// # use parking_lot::Mutex;
 /// # use d3::core::machine_impl::*;
 /// # #[allow(unused_imports)] use d3::d3_derive::*;
 /// #[allow(dead_code)]
@@ -22,6 +23,8 @@ use super::*;
 ///     TestCallback(Sender<TestMessage>, TestStruct),
 ///     // AddSender can be implemented to push a sender onto a list of senders
 ///     AddSender(Sender<TestMessage>),
+///     // AddSenders can be implemented to push an array of senders onto a list of senders
+///     AddSenders(&[Sender<TestMessage>]),
 ///     // RemoveAllSeners can be implemented to clear list of senders
 ///     RemoveAllSenders,
 ///     // Notify, is setup for a notification via TestData, where usize is a message count
@@ -58,7 +61,8 @@ use super::*;
 /// When warranted, an implementation for one or more instructions
 /// can be provided. This illustrates advancing TestMessage::ChaosMonkey.
 /// ```
-/// # #[allow(unused_imports)] use std::sync::{Arc, Mutex};
+/// # #[allow(unused_imports)] use std::sync::Arc;
+/// # use parking_lot::Mutex;
 /// # use d3::core::machine_impl::*;
 /// # #[allow(unused_imports)] use d3::d3_derive::*;
 /// # #[allow(dead_code)]
@@ -192,6 +196,8 @@ pub enum TestMessage {
     TestCallback(TestMessageSender, TestStruct),
     // AddSender can be implemented to push a sender onto a list of senders
     AddSender(TestMessageSender),
+    // AddSenders can be implemented to push a vec of senders onto a list of senders
+    AddSenders(Vec<TestMessageSender>),
     // RemoveAllSeners can be implemented to clear list of senders
     RemoveAllSenders,
     // Notify, is setup for a notification via TestData, where usize is a message count

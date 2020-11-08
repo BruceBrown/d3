@@ -6,6 +6,7 @@ use d3::components::coordinators::CoordinatorInfo;
 use d3::components::{ComponentError, ComponentInfo};
 use echo_service::*;
 use monitor_service::monitor;
+use udp_echo_service::*;
 /// coordinators (I dislike the name) assemble components to form a service.
 /// The idea being that they have an understanding of what's needed and can
 /// call upon components to create instances.
@@ -20,7 +21,7 @@ pub fn configure(settings: &settings::Settings, components: &[ComponentInfo]) ->
                 "ChatCoordinator" => chat_coordinator::configure(settings, components),
                 "MonitorCoordinator" => monitor::configure(settings, components),
                 "AliceCoordinator" => alice::configure(settings, components),
-                #[allow(unreachable_patterns)]
+                "UdpEchoCoordinator" => udp_echo_coordinator::configure(settings, components),
                 _ => {
                     log::warn!("unhandled {:#?} coordintor configuration", k);
                     Ok(None)

@@ -6,7 +6,7 @@
 extern crate smart_default;
 
 // this should become a prelude
-#[allow(unused_imports)] use std::sync::{Arc, Mutex};
+#[allow(unused_imports)] use std::sync::Arc;
 
 use d3::core::machine_impl::*;
 

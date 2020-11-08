@@ -34,7 +34,7 @@ impl Machine<ComponentCmd> for ProducerComponent {
 
     fn receive(&self, cmd: ComponentCmd) {
         match cmd {
-            ComponentCmd::NewSession(conn_id, service, any_sender) if service == "EchoServer" => self.create_instance(conn_id, any_sender),
+            ComponentCmd::NewSession(conn_id, service, any_sender) if service == "EchoService" => self.create_instance(conn_id, any_sender),
             ComponentCmd::Start => (),
             ComponentCmd::Stop => (),
             _ => (),
@@ -59,11 +59,10 @@ impl EchoInstance {
             ..Default::default()
         }
     }
-    fn add_sink(&self, sender: EchoCmdSender) { self.mutable.lock().unwrap().senders.push(sender); }
+    fn add_sink(&self, sender: EchoCmdSender) { self.mutable.lock().senders.push(sender); }
     fn new_data(&self, conn_id: u128, bytes: &EchoData) {
         self.mutable
             .lock()
-            .unwrap()
             .senders
             .iter()
             .for_each(|s| send_cmd(s, EchoCmd::NewData(conn_id, Arc::clone(bytes))));

@@ -1,5 +1,5 @@
 [package]
-name = "monitor-service"
+name = "d3-life"
 # When publishing a new version:
 # - Update CHANGELOG.md
 # - Update README.md
@@ -9,18 +9,26 @@ authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/BruceBrown/d3/tree/master/examples/monitor-service"
+repository = "https://github.com/BruceBrown/d3/tree/master/examples/d3-life"
 homepage = "https://github.com/BruceBrown/d3"
 #documentation = "https://docs.rs/d3"
-description = "A framework for server development -- example web service"
+description = "A framework for server development -- example game engine"
 keywords = ["non-blocking", "server", "framework"]
 categories = ["asynchronous", "concurrency"]
 exclude = ["/ci/*", "/bors.toml"]
 
 
 [dependencies]
-
 log = "0.4"
+simplelog = "0.8"
+crossbeam = "0.8"
 parking_lot = "0.11"
+rand = "0.7"
 
-d3 = {path = "../../../d3"}
+d3 = {path = "../../."}
+
+
+[dependencies.sdl2]
+version = "0.34"
+default-features = false
+features = ["ttf","image","gfx","mixer","static-link","use-vcpkg"]

@@ -5,12 +5,12 @@
 #
 dev_mode = true
 log_level = "Debug"
-test_server_duration = 0
+test_server_duration = 20
 
 #
 # Enable Forwarder feature to run daisy_chain nad fanout_fanin tests.
 features = ["Forwarder"]
-services = []
+#services = []
 
 [executor]
 executors = 4
@@ -21,7 +21,7 @@ time_slice = 20
 [additional.Forwarder]
 run = [
 #    "daisy_chain",
-    "fanout_fanin",
+#    "fanout_fanin",
 #    "chaos_monkey",
 ]
 

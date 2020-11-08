@@ -1,4 +1,5 @@
 use super::*;
+use crossbeam::utils::Backoff;
 
 // Machines cooperate in a collective. There are several primary traits
 // that are presented here. Combined, they form the contract between
@@ -70,30 +71,68 @@ where
     // fn disconnected(&self) { self.lock().unwrap().disconnected(); }
     // fn connected(&self, uuid: Uuid) { self.lock().unwrap().connected(uuid); }
 
+    // In order to prevent lockup of an executor, a try_lock is attempted, while
+    // it should always obtain the lock, there may be data-races where it can't.
+    // In those rare cases, a warning is logged and backoff is used. Eventually,
+    // it will give up and re-schedule. This same approach is used for the disconnected()
+    // and connected() methods.
     fn receive(&self, cmd: P) {
-        let mut lock = self.try_lock();
-        if let Ok(ref mut mutex) = lock {
+        if let Some(ref mut mutex) = self.try_lock() {
             (*mutex).receive(cmd);
         } else {
-            log::error!("try_lock failed for receive");
+            log::warn!("try_lock failed for receive, retrying");
+            let backoff = Backoff::new();
+            loop {
+                if let Some(ref mut mutex) = self.try_lock() {
+                    (*mutex).receive(cmd);
+                    return;
+                } else if backoff.is_completed() {
+                    log::error!("try_lock failed for receive, giving up after multiple retries");
+                    return;
+                } else {
+                    backoff.snooze();
+                }
+            }
         }
     }
 
     fn disconnected(&self) {
-        let mut lock = self.try_lock();
-        if let Ok(ref mut mutex) = lock {
+        if let Some(ref mut mutex) = self.try_lock() {
             (*mutex).disconnected();
         } else {
-            log::error!("try_lock failed for disconnected");
+            log::warn!("try_lock failed for disconnected, retrying");
+            let backoff = Backoff::new();
+            loop {
+                if let Some(ref mut mutex) = self.try_lock() {
+                    (*mutex).disconnected();
+                    return;
+                } else if backoff.is_completed() {
+                    log::error!("try_lock failed for disconnected, giving up after multiple retries");
+                    return;
+                } else {
+                    backoff.snooze();
+                }
+            }
         }
     }
 
     fn connected(&self, uuid: Uuid) {
-        let mut lock = self.try_lock();
-        if let Ok(ref mut mutex) = lock {
+        if let Some(ref mut mutex) = self.try_lock() {
             (*mutex).connected(uuid);
         } else {
-            log::error!("try_lock failed for connected");
+            log::warn!("try_lock failed for connected, retrying");
+            let backoff = Backoff::new();
+            loop {
+                if let Some(ref mut mutex) = self.try_lock() {
+                    (*mutex).connected(uuid);
+                    return;
+                } else if backoff.is_completed() {
+                    log::error!("try_lock failed for connected, giving up after multiple retries");
+                    return;
+                } else {
+                    backoff.snooze();
+                }
+            }
         }
     }
 }

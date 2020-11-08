@@ -19,11 +19,11 @@ exclude = ["/ci/*", "/bors.toml"]
 
 
 [dependencies]
-
 smart-default = "0.6"
 rand = "0.7"
 log = "0.4"
+parking_lot = "0.11"
 
-d3 = {version = "0.1.2", path = "../."}
+d3 = {path = "../."}
 d3-dev-instruction-sets = {path = "../d3-dev-instruction-sets"}
 

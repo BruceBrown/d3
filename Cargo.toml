@@ -4,7 +4,7 @@ name = "d3"
 # - Update CHANGELOG.md
 # - Update README.md
 # - Create "d3-X.Y.Z" git tag
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -29,6 +29,17 @@ incremental = false
 codegen-units = 16
 rpath = false
 
+# Cargo test, optimize with relaxed lto
+[profile.test]
+opt-level = 3
+debug = 2
+debug-assertions = true
+overflow-checks = true
+lto = 'thin'
+incremental = true
+codegen-units = 256
+rpath = false
+
 [profile.bench]
 opt-level = 3
 debug = false
@@ -50,10 +61,11 @@ atomic_refcell = "0.1"
 log = "0.4"
 simplelog = "0.8"
 rand = "0.7"
+parking_lot = "0.11"
 
-d3-core = {version = "0.1.2", path = "./d3-core"}
-d3-derive = {version = "0.1.2", path = "./d3-derive"}
-d3-components =  {version = "0.1.2", path = "./d3-components"}
+d3-core = {version = "0.1.3", path = "./d3-core"}
+d3-derive = {version = "0.1.3", path = "./d3-derive"}
+d3-components = {version = "0.1.3", path = "./d3-components"}
 
 [patch.crates-io]
 # Add patches here
@@ -70,6 +82,7 @@ d3-test-drivers = {path = "./d3-test-drivers"}
 alice-service = {path = "./examples/alice-service"}
 chat-service = {path = "./examples/chat-service"}
 echo-service = {path = "./examples/echo-service"}
+udp-echo-service =  {path = "./examples/udp-echo-service"}
 monitor-service = {path = "./examples/monitor-service"}
 
 
@@ -98,6 +111,12 @@ path = "./examples/echo-service/src/lib.rs"
 
 
 [[example]]
+name = "udp-echo-service"
+crate-type = ["staticlib"]
+path = "./examples/udp-echo-service/src/lib.rs"
+
+
+[[example]]
 name = "monitor-service"
 crate-type = ["staticlib"]
 path = "./examples/monitor-service/src/lib.rs"
@@ -105,6 +124,23 @@ path = "./examples/monitor-service/src/lib.rs"
 [[example]]
 name = "test-server"
 path = "./examples/test-server/src/main.rs"
+
+
+[[example]]
+# Conway's Game of Life -- each cell is a machine
+#
+name = "d3-life"
+path = "./examples/d3-life/src/main.rs"
+
+
+# d3-life links with SDL2, use the vcpkg manager to help with linking
+[package.metadata.vcpkg]
+dependencies = ["sdl2", "sdl2-image[libjpeg-turbo,tiff,libwebp]", "sdl2-ttf", "sdl2-gfx", "sdl2-mixer"]
+git = "https://github.com/microsoft/vcpkg"
+rev = "a0518036077baa4"
+
+[package.metadata.vcpkg.target]
+x86_64-pc-windows-msvc = { triplet = "x64-windows-static-md" }
 
 
 [workspace]
@@ -116,7 +152,9 @@ members = [
  "d3-test-drivers",
  "examples/chat-service",
  "examples/echo-service",
+ "examples/udp-echo-service",
  "examples/monitor-service",
  "examples/alice-service",
  "examples/test-server",
+ "examples/d3-life",
 ]

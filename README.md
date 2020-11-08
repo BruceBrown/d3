@@ -67,13 +67,27 @@ The main `d3` crate just [re-exports](src/lib.rs) tools from smaller subcrates:
 * [`components`](d3-components), a packaged namespace for managing machines. It is modeled upon a component, coordinator, connector model.
 * [`network`](d3-components), a TCP abstraction consumable by machines. It wraps Mio.
 
+## Examples
+A numer of aexamples are available. Fork the d3 repo and `cargo run -p test-server --release` for an example of a server with services.
+
+### Services
+* [`echo service`](examples/echo-service), an example of a TCP echo service
+* [`udp echo service`](examples/udp-echo-service), an example of a UDP echo service
+* [`chat service`](examples/chat-service), an example of a TCP chat service
+* [`alice service`](examples/alice-service), an example of an HTTP service with form manipulation
+* [`monitor service`](examples/monitor-service), an example of how to monitor the core
+
+### Applications
+* [`test server`](examples/test-server), an example of a configurable server providing services
+* [`Conway's Game of Life`](examples/d3-life), an example of a game with a UI and interacting machines
+
 ## Usage
 
 Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-d3 = "0.1.2"
+d3 = "0.1.3"
 ```
 
 ## Compatibility

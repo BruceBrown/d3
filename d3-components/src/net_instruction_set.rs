@@ -18,11 +18,11 @@ use super::*;
 // Bob->Net: Close(conn_id)
 // ```
 
-/// This is where d3 meets Tcp (Udp to follow). The Network leans heavily upon Mio
+/// This is where d3 meets Tcp or UDP. The Network leans heavily upon Mio
 /// to provide the foundation for interacting with the network. The d3 network provides
 /// an additional abstraction to adapt it for d3 machines and encapsulate Mio.
 ///
-/// This sequence diagram illustrates a machine, Alice asking for a listener to
+/// This sequence diagram illustrates a machine, Alice asking for a TCP listener to
 /// be installed. When there is a connection, the network is told to send control
 /// and data commands to the machine Bob.
 ///
@@ -71,6 +71,33 @@ use super::*;
 ///    |                                                    |<-----------------------------|
 ///    |                                                    |                              |
 /// ```
+///
+/// UDP is a bit simpler, as illusted by the following sequence diagram. Alice asks the
+/// network to bind a UDP address. Whenever a packet arrives it is sent to Alice. Alice
+/// can send a packet to the network too. Although there isn't a connection, in the network
+/// sense, a conn_id is used, for both parity and as a shorthand for the local address.
+///
+/// ```text
+/// +-------+                                    +-----+
+/// | Alice |                                    | Net |
+/// +-------+                                    +-----+
+///     |                                           |
+///     | BindUdpListener(address, Alice:sender)    |
+///     |------------------------------------------>|
+///     | ------------------------------\           |
+///     |-| Wait for a packet to arrive |           |
+///     | |-----------------------------|           |
+///     |                                           |
+///     |    RecvPkt(conn_id, local, remote, bytes) |
+///     |<------------------------------------------|
+///     | -----------------------\                  |
+///     |-| Alice sends a packet |                  |
+///     | |----------------------|                  |
+///     |                                           |
+///     | SendPkt(conn_id, remote, bytes)           |
+///     |------------------------------------------>|
+///     |                                           |
+/// ```
 #[derive(Debug, MachineImpl)]
 pub enum NetCmd {
     /// Stop the network. Stop is used in conjuntion with starting and stopping the
@@ -78,6 +105,8 @@ pub enum NetCmd {
     Stop,
     /// Binds a TCP listener to an address, notifying the sender when a connection is accepted.
     BindListener(String, NetSender),
+    /// Bind a UDP listener to an address, notifying the sender when a connection is accepted.
+    BindUdpListener(String, NetSender),
     /// New connection notification (connection_id, bind_addr,
     /// connect_from, max_byte) are sent to the sender regitered via the BindListener.
     NewConn(NetConnId, String, String, usize),
@@ -90,10 +119,16 @@ pub enum NetCmd {
     CloseConn(NetConnId),
     /// Sent to the BindConn sender, RecvBytes provides bytes read from the connection.
     RecvBytes(NetConnId, Vec<u8>),
+    /// Sent to UDP listener
+    /// socket id, destination, source, bytes
+    RecvPkt(NetConnId, String, String, Vec<u8>),
     /// Sent to the network, SendBytes provides bytes to be written to the network.
     SendBytes(NetConnId, Vec<u8>),
+    /// Send UDP packet to network
+    /// socket id, destination, bytes
+    SendPkt(NetConnId, String, Vec<u8>),
     /// Sent to the BindConn sender, it provides an update to the number of bytes
-    /// availbe for writing to the network. A use case for this would be providing
+    /// available for writing to the network. A use case for this would be providing
     /// feedback for throttling data being generated for a connection.
     SendReady(NetConnId, usize),
 }

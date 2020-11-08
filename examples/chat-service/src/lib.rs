@@ -17,8 +17,9 @@
 extern crate smart_default;
 extern crate crossbeam;
 
+use parking_lot::Mutex;
 use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 // Maybe turn this into a prelude?
 #[allow(unused_imports)]
@@ -100,7 +101,7 @@ mod tests {
             },
         );
         settings.coordinator.push(chat_map);
-        settings.services.insert("ChatServer".to_string());
+        settings.services.insert("ChatService".to_string());
         if let Ok(Some(coordinator)) = chat_coordinator::configure(&settings, components.as_slice()) {
             // no longer need components
             drop(components);

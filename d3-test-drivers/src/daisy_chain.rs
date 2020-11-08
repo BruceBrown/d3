@@ -34,8 +34,9 @@ pub struct DaisyChainDriver {
     #[default(AtomicUsize::new(1))]
     iteration: AtomicUsize,
 }
-impl DaisyChainDriver {
-    pub fn setup(&mut self) {
+impl TestDriver for DaisyChainDriver {
+    // setup the machines
+    fn setup(&mut self) {
         self.baseline = executor::get_machine_count();
         let (_, s) = if self.bound_queue {
             executor::connect(Forwarder::new(1))
@@ -72,43 +73,36 @@ impl DaisyChainDriver {
         );
 
         last_sender.send(TestMessage::Notify(sender, self.exepected_message_count)).unwrap();
-
         self.receiver = Some(receiver);
 
         // wait for the scheduler/executor to get them all assigned
-        log::debug!("daisy_chain: base-line: {}", self.baseline);
-        loop {
-            thread::yield_now();
-            if executor::get_machine_count() >= self.baseline + self.machine_count - 1 {
-                break;
-            }
+        if wait_for_machine_setup(self.baseline + self.machine_count - 1).is_err() {
+            panic!("daisy_chain: machine setup failed");
         }
         log::debug!("daisy_chain: setup complete");
     }
-    pub fn teardown(daisy_chain: Self) {
+
+    // tear down the machines
+    fn teardown(mut daisy_chain: Self) {
         log::debug!("daisy_chain: tear-down started");
         let baseline = daisy_chain.baseline;
-        for s in &daisy_chain.senders {
-            s.send(TestMessage::RemoveAllSenders).unwrap();
-        }
-        // drop, wiping out all senders/receivers/machines
+        daisy_chain
+            .senders
+            .drain(..)
+            .for_each(|s| s.send(TestMessage::RemoveAllSenders).unwrap());
+        daisy_chain.first_sender = None;
+        daisy_chain.receiver = None;
         drop(daisy_chain);
-        let mut start = std::time::Instant::now();
+
         // wait for the machines to all go away
-        loop {
-            thread::yield_now();
-            if baseline >= executor::get_machine_count() {
-                break;
-            }
-            if start.elapsed() >= std::time::Duration::from_secs(1) {
-                start = std::time::Instant::now();
-                log::debug!("baseline {}, count {}", baseline, executor::get_machine_count());
-                d3::core::executor::stats::request_machine_info();
-            }
+        if wait_for_machine_teardown(baseline).is_err() {
+            panic!("daisy_chain: machine tear-down failed");
         }
         log::debug!("daisy_chain: tear-down complete");
     }
-    pub fn run(&self) {
+
+    // run a single iteration
+    fn run(&self) {
         // let count = self.iteration.fetch_add(1, Ordering::SeqCst);
         // log::info!("daisy_chain iteration: {}", count);
         if let Some(sender) = self.first_sender.as_ref() {
@@ -116,7 +110,9 @@ impl DaisyChainDriver {
                 sender.send(TestMessage::TestData(msg_id)).unwrap();
             }
             if let Some(receiver) = self.receiver.as_ref() {
-                wait_for_notification(receiver, self.exepected_message_count, self.duration);
+                if wait_for_notification(receiver, self.exepected_message_count, self.duration).is_err() {
+                    panic!("daisy_chain: completion notification failed");
+                }
             }
         }
     }

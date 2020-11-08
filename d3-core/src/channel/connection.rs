@@ -13,8 +13,8 @@ impl Connection {
     pub fn new() -> (Arc<Mutex<Self>>, Arc<Mutex<Self>>) {
         let c1 = Arc::new(Mutex::new(Self::default()));
         let c2 = Arc::new(Mutex::new(Self::default()));
-        c1.lock().unwrap().connection = Arc::downgrade(&c2);
-        c2.lock().unwrap().connection = Arc::downgrade(&c1);
+        c1.lock().connection = Arc::downgrade(&c2);
+        c2.lock().connection = Arc::downgrade(&c1);
         (c1, c2)
     }
 }

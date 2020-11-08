@@ -5,12 +5,12 @@ use std::io::{self, Read};
 use std::net::SocketAddr;
 
 use mio::event::Event;
-use mio::net::{TcpListener, TcpStream};
+use mio::net::{TcpListener, TcpStream, UdpSocket};
 use mio::{Events, Interest, Poll, Token, Waker};
 
 use channel::TryRecvError;
 use ringbuf::RingBuffer;
-use slab::Slab;
+use super_slab::SuperSlab;
 
 // Here's how this all works... There's a single thread responsible the network. Essentially,
 // there's a loop in which does the following:
@@ -27,7 +27,7 @@ use slab::Slab;
 //     Lookup should be fast.
 //
 // This turns into some decisions
-//     Since token will need to be reused, we'll use a slab to maange things
+//     Since token will need to be reused, we'll use a slab to manange things
 //     We're going to use a cirular buffer for managing send data and provide
 //     reports on available space.
 //     We bounce between poll and channel reading and it needs to be responsive,
@@ -119,10 +119,15 @@ const MAX_BYTES: usize = 4096;
 const MAX_CONNECTIONS: usize = 10000;
 
 #[derive(Debug)]
+enum Listener {
+    TcpListener(TcpListener),
+    UdpListener(UdpSocket),
+}
+#[derive(Debug)]
 struct Server {
     is_dead: bool,
     bind_addr: String,
-    listener: TcpListener,
+    listener: Listener,
     sender: NetSender,
 }
 
@@ -241,8 +246,8 @@ struct NetworkThread {
     waker_sender: NetSender,
     is_running: bool,
     poll: Poll,
-    connections: Slab<Connection>,
-    servers: Slab<Server>,
+    connections: SuperSlab<Connection>,
+    servers: SuperSlab<Server>,
     waker_thread: Option<thread::JoinHandle<()>>,
 }
 impl NetworkThread {
@@ -255,8 +260,8 @@ impl NetworkThread {
                 waker_sender,
                 is_running: true,
                 poll: Poll::new().unwrap(),
-                connections: Slab::with_capacity(MAX_CONNECTIONS),
-                servers: Slab::with_capacity(MAX_SERVERS),
+                connections: SuperSlab::with_capacity(MAX_CONNECTIONS),
+                servers: SuperSlab::with_capacity(MAX_SERVERS),
                 waker_thread: None,
             };
             if net_thread.run(waker_receiver).is_err() {}
@@ -291,22 +296,51 @@ impl NetworkThread {
             self.poll.poll(&mut events, Some(POLL_INTERVAL)).unwrap();
             for event in events.iter() {
                 match event.token() {
+                    // 1023 is the waker token
                     token if token.0 == 1023 => (),
+                    // 0..1023 is a UDP or TCP listener port
                     token if token.0 < 1023 => {
                         while let Some(server) = self.servers.get_mut(token.0) {
-                            let (connection, address) = match server.listener.accept() {
-                                Ok((connection, address)) => (connection, address),
-                                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                                    break;
+                            match &server.listener {
+                                // handle TCP event
+                                Listener::TcpListener(listener) => {
+                                    match listener.accept() {
+                                        Ok((connection, address)) => self.store_connection(&token, connection, address)?,
+                                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                            break;
+                                        },
+                                        Err(_e) => {
+                                            server.is_dead = true;
+                                            break;
+                                        },
+                                    };
                                 },
-                                Err(_e) => {
-                                    server.is_dead = true;
-                                    break;
+                                // handle UDP event
+                                Listener::UdpListener(socket) => {
+                                    let mut buf = [0; 1 << 16];
+                                    match socket.recv_from(&mut buf) {
+                                        Ok((packet_size, source_addr)) => {
+                                            let cmd = NetCmd::RecvPkt(
+                                                token.0,
+                                                server.bind_addr.to_string(),
+                                                source_addr.to_string(),
+                                                buf[.. packet_size].to_vec(),
+                                            );
+                                            server.sender.send(cmd)?
+                                        },
+                                        Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                            break;
+                                        },
+                                        Err(_e) => {
+                                            server.is_dead = true;
+                                            break;
+                                        },
+                                    }
                                 },
-                            };
-                            self.store_connection(&token, connection, address)?;
+                            }
                         }
                     },
+                    // 1024.. is a data connection
                     token => {
                         match self.handle_connection_event(&token, event) {
                             Ok(true) => match self.remove_connection(&token, true) {
@@ -328,11 +362,12 @@ impl NetworkThread {
                         self.is_running = false;
                         break Ok(());
                     },
-                    Ok(NetCmd::BindListener(addr, sender)) => self.bind_listener(addr, sender),
+                    Ok(NetCmd::BindListener(addr, sender)) => self.bind_tcp_listener(addr, sender),
+                    Ok(NetCmd::BindUdpListener(addr, sender)) => self.bind_udp_listener(addr, sender),
                     Ok(NetCmd::BindConn(conn_id, sender)) => self.bind_connection(conn_id, sender),
                     Ok(NetCmd::CloseConn(conn_id)) => self.close_connection(conn_id),
                     Ok(NetCmd::SendBytes(conn_id, bytes)) => self.send_bytes(conn_id, bytes),
-
+                    Ok(NetCmd::SendPkt(conn_id, destination, bytes)) => self.send_pkt(conn_id, destination, bytes),
                     Ok(_) => {
                         log::warn!("unhandled NetCmd");
                         Ok(())
@@ -419,6 +454,24 @@ impl NetworkThread {
         result
     }
 
+    fn send_pkt(&self, conn_id: NetConnId, destination: String, bytes: Vec<u8>) -> net::Result<()> {
+        let key: usize = conn_id;
+        let dest_addr: SocketAddr = destination.parse()?;
+        let result = if let Some(server) = self.servers.get(key) {
+            if let Listener::UdpListener(socket) = &server.listener {
+                socket.send_to(&bytes, dest_addr)?;
+                Ok(())
+            } else {
+                log::debug!("connection {} doesn't have a UDP socket associated with it", conn_id);
+                Ok(())
+            }
+        } else {
+            log::debug!("connection {} doesn't exist", conn_id);
+            Ok(())
+        };
+        result
+    }
+
     fn close_connection(&mut self, conn_id: NetConnId) -> net::Result<()> {
         let token = Token(conn_id);
         self.remove_connection(&token, false)
@@ -436,7 +489,7 @@ impl NetworkThread {
         Ok(())
     }
 
-    fn bind_listener(&mut self, addr: String, sender: NetSender) -> net::Result<()> {
+    fn bind_tcp_listener(&mut self, addr: String, sender: NetSender) -> net::Result<()> {
         let entry = self.servers.vacant_entry();
         let key = entry.key();
         let token = Token(key);
@@ -446,7 +499,24 @@ impl NetworkThread {
         let server = Server {
             is_dead: false,
             bind_addr: addr,
-            listener,
+            listener: Listener::TcpListener(listener),
+            sender,
+        };
+        entry.insert(server);
+        Ok(())
+    }
+
+    fn bind_udp_listener(&mut self, addr: String, sender: NetSender) -> net::Result<()> {
+        let entry = self.servers.vacant_entry();
+        let key = entry.key();
+        let token = Token(key);
+        let bind_addr = addr.parse().unwrap();
+        let mut listener = UdpSocket::bind(bind_addr)?;
+        self.poll.registry().register(&mut listener, token, Interest::READABLE)?;
+        let server = Server {
+            is_dead: false,
+            bind_addr: addr,
+            listener: Listener::UdpListener(listener),
             sender,
         };
         entry.insert(server);

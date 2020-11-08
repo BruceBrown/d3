@@ -44,6 +44,10 @@ pub enum CoordinatorVariant {
         tcp_address: String,
         kv: Option<HashMap<String, String>>,
     },
+    SimpleUdpConfig {
+        udp_address: String,
+        kv: Option<HashMap<String, String>>,
+    },
 }
 
 /// All of the component config variants

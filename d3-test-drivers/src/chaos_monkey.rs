@@ -41,8 +41,10 @@ pub struct ChaosMonkeyDriver {
     receiver: Option<TestMessageReceiver>,
     baseline: usize,
 }
-impl ChaosMonkeyDriver {
-    pub fn setup(&mut self) {
+
+impl TestDriver for ChaosMonkeyDriver {
+    // setup the machines
+    fn setup(&mut self) {
         self.baseline = executor::get_machine_count();
         // we're going to create N machines, each having N senders, plus a notifier.
         for idx in 1 ..= self.machine_count {
@@ -58,52 +60,47 @@ impl ChaosMonkeyDriver {
         } else {
             executor::connect_unbounded(Forwarder::new(self.machine_count + 1))
         };
-        // build a complete map where every machine has a sender to every other machine
-        // may need to build a partial mapping for large config, let's see
+        log::debug!("chaos_monkey: monkeys created");
+        // form a complete map by sending all the monkey's senders to each monkey
         for s1 in &self.senders {
-            for s2 in &self.senders {
-                s2.send(TestMessage::AddSender(s1.clone())).unwrap();
-            }
+            let cloned_senders = self.senders.clone();
+            s1.send(TestMessage::AddSenders(cloned_senders)).unwrap();
             // chaos monkey ignores the count
             s1.send(TestMessage::Notify(notifier.clone(), 0)).unwrap();
         }
         let (sender, receiver) = channel();
         notifier.send(TestMessage::Notify(sender, self.message_count)).unwrap();
         self.receiver = Some(receiver);
+        log::debug!("chaos_monkey: monkeys wired");
+
         // wait for the scheduler/executor to get them all assigned
-        log::debug!("chaos_monkey: base-line: {}", self.baseline);
-        loop {
-            thread::yield_now();
-            if executor::get_machine_count() >= self.baseline + self.machine_count - 1 {
-                break;
-            }
+        if wait_for_machine_setup(self.baseline + self.machine_count - 1).is_err() {
+            panic!("chaos_monkey: machine setup failed");
         }
         log::debug!("chaos_monkey: setup complete");
     }
-    pub fn teardown(chaos_monkey: Self) {
+
+    // tear down the machines
+    fn teardown(mut chaos_monkey: Self) {
         log::debug!("chaos_monkey: tear-down started");
         let baseline = chaos_monkey.baseline;
         // due to a sender pointing to its own receiver, we need to dismantle senders.
         for s in &chaos_monkey.senders {
             s.send(TestMessage::RemoveAllSenders).unwrap();
         }
-        // drop, wiping out all senders/receivers/machines
+        chaos_monkey.senders.clear();
+        chaos_monkey.receiver = None;
         drop(chaos_monkey);
-        let mut start = std::time::Instant::now();
+
         // wait for the machines to all go away
-        loop {
-            thread::yield_now();
-            if baseline >= executor::get_machine_count() {
-                break;
-            }
-            if start.elapsed() >= std::time::Duration::from_secs(1) {
-                start = std::time::Instant::now();
-                log::debug!("baseline {}, count {}", baseline, executor::get_machine_count());
-            }
+        if wait_for_machine_teardown(baseline).is_err() {
+            panic!("chaos_monkey: machine tear-down failed");
         }
         log::debug!("chaos_monkey: tear-down complete");
     }
-    pub fn run(&self) {
+
+    // run a single iteration
+    fn run(&self) {
         let range = Uniform::from(0 .. self.senders.len());
         let mut rng = rand::rngs::OsRng::default();
         for _ in 0 .. self.message_count {
@@ -117,7 +114,9 @@ impl ChaosMonkeyDriver {
                 .unwrap();
         }
         if let Some(receiver) = self.receiver.as_ref() {
-            wait_for_notification(receiver, self.message_count, self.duration);
+            if wait_for_notification(receiver, self.message_count, self.duration).is_err() {
+                panic!("chaos_monkey: completion notification failed");
+            }
         }
     }
 }

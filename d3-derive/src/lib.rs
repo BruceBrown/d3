@@ -233,7 +233,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             type InstructionSet = #name;
             /// Consume a raw machine, using it to create a machine that is usable by
             /// the framework.
-            fn build_raw<T>(raw: T, channel_capacity: usize) -> (std::sync::Arc<std::sync::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
+            fn build_raw<T>(raw: T, channel_capacity: usize) -> (std::sync::Arc<parking_lot::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -241,7 +241,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_common(raw, sender, receiver)
             }
 
-            fn build_addition<T>(machine: &std::sync::Arc<std::sync::Mutex<T>>, channel_capacity: usize) -> (Sender<Self::InstructionSet>, MachineAdapter)
+            fn build_addition<T>(machine: &std::sync::Arc<parking_lot::Mutex<T>>, channel_capacity: usize) -> (Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -249,7 +249,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_addition_common(machine, sender, receiver)
             }
 
-            fn build_unbounded<T>(raw: T) -> (std::sync::Arc<std::sync::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
+            fn build_unbounded<T>(raw: T) -> (std::sync::Arc<parking_lot::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -257,7 +257,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_common(raw, sender, receiver)
             }
 
-            fn build_addition_unbounded<T>(machine: &std::sync::Arc<std::sync::Mutex<T>>) -> (Sender<Self::InstructionSet>, MachineAdapter)
+            fn build_addition_unbounded<T>(machine: &std::sync::Arc<parking_lot::Mutex<T>>) -> (Sender<Self::InstructionSet>, MachineAdapter)
             where T: 'static + Machine<Self::InstructionSet>
             {
                 // need to review allocation strategy for bounded
@@ -265,11 +265,11 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 Self::build_addition_common(machine, sender, receiver)
             }
 
-            fn build_common<T>(raw: T, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (std::sync::Arc<std::sync::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter )
+            fn build_common<T>(raw: T, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (std::sync::Arc<parking_lot::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter )
                 where T: 'static + Machine<Self::InstructionSet>
             {
                  // wrap it
-                 let instance: std::sync::Arc<std::sync::Mutex<T>> = std::sync::Arc::new(std::sync::Mutex::new(raw));
+                 let instance: std::sync::Arc<parking_lot::Mutex<T>> = std::sync::Arc::new(parking_lot::Mutex::new(raw));
                  // clone it, making it look like a machine, Machine for Mutex<T> facilitates this
                  let machine = std::sync::Arc::clone(&instance) as std::sync::Arc<dyn Machine<Self::InstructionSet>>;
                  // wrap the machine dependent bits
@@ -281,7 +281,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                  (instance, sender, machine_adapter)
             }
 
-            fn build_addition_common<T>(machine: &std::sync::Arc<std::sync::Mutex<T>>, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Sender<Self::InstructionSet>, MachineAdapter )
+            fn build_addition_common<T>(machine: &std::sync::Arc<parking_lot::Mutex<T>>, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Sender<Self::InstructionSet>, MachineAdapter )
                 where T: 'static + Machine<Self::InstructionSet>
             {
                  // clone it, making it look like a machine, Machine for Mutex<T> facilitates this

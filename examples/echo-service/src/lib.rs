@@ -3,8 +3,9 @@
 extern crate smart_default;
 extern crate crossbeam;
 
+use parking_lot::Mutex;
 use std::convert::TryInto;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 // Maybe turn this into a prelude?
 #[allow(unused_imports)]

@@ -27,9 +27,9 @@ pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Op
                 }
                 log::debug!("monitor service selected configuration: {:#?}", value);
                 let (m, sender) = executor::connect::<_, NetCmd>(coordinator);
-                m.lock().unwrap().mutable.lock().unwrap().set_sender(sender.clone());
+                m.lock().mutable.lock().set_sender(sender.clone());
                 get_network_sender()
-                    .send(NetCmd::BindListener(m.lock().unwrap().bind_addr.clone(), sender))
+                    .send(NetCmd::BindListener(m.lock().bind_addr.clone(), sender))
                     .expect("BindListener failed");
                 let sender = executor::and_connect::<_, CoreStatsMessage>(&m);
                 executor::stats::add_core_stats_sender(sender);
@@ -70,22 +70,19 @@ impl MonitorCoordinator {
     fn add_connection(&self, conn_id: NetConnId) {
         if self
             .net_sender
-            .send(NetCmd::BindConn(
-                conn_id,
-                self.mutable.lock().unwrap().my_sender.as_ref().unwrap().clone(),
-            ))
+            .send(NetCmd::BindConn(conn_id, self.mutable.lock().my_sender.as_ref().unwrap().clone()))
             .is_err()
         {}
-        self.mutable.lock().unwrap().connections.insert(conn_id);
+        self.mutable.lock().connections.insert(conn_id);
     }
-    fn remove_connection(&self, conn_id: NetConnId) { self.mutable.lock().unwrap().connections.remove(&conn_id); }
+    fn remove_connection(&self, conn_id: NetConnId) { self.mutable.lock().connections.remove(&conn_id); }
     fn executor_stats(&self, stats: ExecutorStats) {
         let bytes: Vec<u8> = format!("{:#?}", stats).as_bytes().to_vec();
-        self.mutable.lock().unwrap().send_bytes(bytes, &self.net_sender);
+        self.mutable.lock().send_bytes(bytes, &self.net_sender);
     }
     fn sched_stats(&self, stats: SchedStats) {
         let bytes: Vec<u8> = format!("{:#?}", stats).as_bytes().to_vec();
-        self.mutable.lock().unwrap().send_bytes(bytes, &self.net_sender);
+        self.mutable.lock().send_bytes(bytes, &self.net_sender);
     }
 }
 

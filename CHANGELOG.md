@@ -1,5 +1,17 @@
 # d3 -- Revision ChangeLog
 
+## SuperSlab and Conway's Game of Life
+
+* Move version to v0.1.3 for all crates.
+* Switch from slab::Slab to super_slab::SuperSlab to handle machine growth
+* Added an example, Conway's Game of Life, as an example of using machines as game elements.
+
+## Performance and UDP
+
+* Switch from std::sync::{Mutex, RWLock} to parking_lot versions, they are slightly faster.
+* Finally, got around to adding UDP support to the network.
+* Added new example of udp echo service.
+
 ## 29-Oct-202 Release to crates.io
 
 | Crate         | Version | Description |

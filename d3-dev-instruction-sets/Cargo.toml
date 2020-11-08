@@ -20,6 +20,7 @@ crossbeam = "0.8"
 smart-default = "0.6"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
 log = "0.4"
+parking_lot = "0.11"
 
-d3 = {version = "0.1.2", path = "../."}
+d3 = {path = "../."}
 

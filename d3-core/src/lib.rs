@@ -4,7 +4,8 @@
 //!
 //! # examples
 //! ```
-//! # use std::sync::{Arc, Mutex};
+//! # use std::sync::Arc;
+//! # use parking_lot::Mutex;
 //! # #[allow(unused_imports)]
 //! # use d3_core::executor;
 //! # use d3_core::machine_impl::*;
@@ -33,7 +34,8 @@
 //! Occasionally, a machine may implement multiple instruction sets. This
 //! is an example of Alice implementing TestMessage and StateTable.
 //! ```
-//! # use std::sync::{Arc, Mutex};
+//! # use std::sync::Arc;
+//! # use parking_lot::Mutex;
 //! # #[allow(unused_imports)]
 //! # use d3_core::executor;
 //! # use d3_core::machine_impl::*;
@@ -79,7 +81,8 @@
 //! # examples
 //!
 //! ```
-//! use std::sync::{Arc, Mutex};
+//! use std::sync::Arc;
+//! use parking_lot::Mutex;
 //! use d3_core::machine_impl::*;
 //! use d3_derive::*;
 //! #[derive(Debug, MachineImpl)]
@@ -92,12 +95,13 @@
 //! // a machine sending and receiving StateTable instructions.
 //! ```
 // pull in commonly used elements
+use parking_lot::{Mutex, RwLock};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::iter;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -192,7 +196,7 @@ pub use crate::collective::machine::send_cmd;
 #[allow(deprecated)]
 pub mod executor {
     pub use crate::scheduler::{
-        executor::{get_run_queue_len, get_time_slice, set_time_slice},
+        executor::{get_executors_snoozing, get_run_queue_len, get_time_slice, set_time_slice},
         machine::{
             and_connect, and_connect_unbounded, and_connect_with_capacity, connect, connect_unbounded, connect_with_capacity,
             get_default_channel_capacity, set_default_channel_capacity,

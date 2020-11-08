@@ -20,6 +20,7 @@ pub static RUN_QUEUE_LEN: AtomicUsize = AtomicUsize::new(0);
 pub fn get_run_queue_len() -> usize { RUN_QUEUE_LEN.load(Ordering::SeqCst) }
 /// The EXECUTORS_SNOOZING static is the current number of executors that are idle, it is considered read-only.
 pub static EXECUTORS_SNOOZING: AtomicUsize = AtomicUsize::new(0);
+pub fn get_executors_snoozing() -> usize { EXECUTORS_SNOOZING.load(Ordering::SeqCst) }
 
 // Unlike most of the system, which uses u128 ids, the executor uses usize. If atomic u128 were
 // available, it would likely use u128 as well. The decision to use atomic is based upon this
@@ -129,7 +130,6 @@ impl ThreadData {
         let stealers = self
             .workers
             .read()
-            .unwrap()
             .iter()
             .filter(|w| w.1.id != self.id)
             .map(|w| Arc::clone(&w.1.stealer))
@@ -183,14 +183,14 @@ impl ThreadData {
                 // and after all that, we've got nothing left to do. Let's catch some zzzz's
                 if blocked_sender_count == 0 && !ran_task {
                     if backoff.is_completed() {
-                        // log::debug!("executor {} is sleeping", self.id);
+                        log::debug!("executor {} is sleeping", self.id);
                         stats.sleep_count += 1;
                         let start = std::time::Instant::now();
                         EXECUTORS_SNOOZING.fetch_add(1, Ordering::SeqCst);
                         thread::park_timeout(stats_event.remaining());
                         EXECUTORS_SNOOZING.fetch_sub(1, Ordering::SeqCst);
                         stats.sleep_time += start.elapsed();
-                    // log::debug!("executor {} is awake", self.id);
+                        log::debug!("executor {} is awake", self.id);
                     } else {
                         backoff.snooze();
                     }
@@ -232,7 +232,7 @@ impl ThreadData {
 
     #[inline]
     // get the executor state
-    fn get_state(&self) -> ExecutorState { self.shared_info.lock().unwrap().get_state() }
+    fn get_state(&self) -> ExecutorState { self.shared_info.lock().get_state() }
 
     // one time setup
     fn setup(&mut self) {
@@ -252,7 +252,7 @@ impl ThreadData {
         // pull out some commonly used stuff
         self.stealers = self.build_stealers();
         log::debug!("executor {} running with {} stealers", self.id, self.stealers.len());
-        self.shared_info.lock().as_mut().unwrap().set_state(ExecutorState::Running);
+        self.shared_info.lock().set_state(ExecutorState::Running);
     }
 
     // check the channel, return true to quit.
@@ -325,7 +325,7 @@ impl ThreadData {
     fn run_task(&mut self, time_slice: Duration, stats: &mut ExecutorStats) -> bool {
         if let Some(task) = find_task(&self.work, &self.run_queue, &self.stealers) {
             RUN_QUEUE_LEN.fetch_sub(1, Ordering::SeqCst);
-
+            // log::trace!("exec {} executing task {} for machine {}", self.id, task.id, task.machine.get_key());
             if task.is_invalid(self.id) {
                 panic!("mismatched tasks")
             }
@@ -360,7 +360,7 @@ impl ThreadData {
 
             machine.clear_task_id(task_id);
             self.reschedule(machine);
-            if self.shared_info.lock().unwrap().get_state() == ExecutorState::Parked {
+            if self.shared_info.lock().get_state() == ExecutorState::Parked {
                 log::debug!("parked executor {} completed", self.id);
             }
 
@@ -437,7 +437,7 @@ struct Worker {
     shared_info: Arc<Mutex<SharedExecutorInfo>>,
 }
 impl Worker {
-    fn get_state(&self) -> ExecutorState { self.shared_info.lock().unwrap().get_state() }
+    fn get_state(&self) -> ExecutorState { self.shared_info.lock().get_state() }
     fn wake_executor(&self) { self.thread.as_ref().unwrap().thread().unpark(); }
     fn wakeup_and_die(&self) {
         if self.sender.send(SchedCmd::Terminate(false)).is_err() {
@@ -523,21 +523,21 @@ impl Executor {
     // stop the executor
     fn stop(&self) {
         // tell all the workers to stop their executors
-        for w in self.workers.read().unwrap().iter() {
+        for w in self.workers.read().iter() {
             w.1.wakeup_and_die();
         }
     }
     // notification that an executor is parked
     fn parked_executor(&self, id: usize) {
         // protect ourself from re-entry
-        let _guard = self.barrier.lock().unwrap();
+        let _guard = self.barrier.lock();
         // dump state of all workers
-        self.workers.read().unwrap().iter().for_each(|(_, v)| {
+        self.workers.read().iter().for_each(|(_, v)| {
             let state = v.get_state();
             log::debug!("worker {} {:#?}", v.id, state)
         });
 
-        if let Some(worker) = self.workers.read().unwrap().get(&id) {
+        if let Some(worker) = self.workers.read().get(&id) {
             // at this point the worker thread won't load tasks into local queue, so drain it
             let mut count = 0;
             loop {
@@ -553,27 +553,27 @@ impl Executor {
             log::debug!("stole back {} tasks queue is_empty() = {}", count, self.run_queue.is_empty());
         }
 
-        if let Some(worker) = self.workers.write().unwrap().remove(&id) {
+        if let Some(worker) = self.workers.write().remove(&id) {
             // the executor will self-terminate
             // save the worker, otherwise it gets dropped things go wrong with join
-            self.parked_workers.write().unwrap().insert(id, worker);
-            let dead_count = self.parked_workers.read().unwrap().len();
-            self.stats.lock().unwrap().remove_worker(dead_count);
+            self.parked_workers.write().insert(id, worker);
+            let dead_count = self.parked_workers.read().len();
+            self.stats.lock().remove_worker(dead_count);
         }
         self.add_executor();
     }
     // wake parked threads
     fn wake_parked_threads(&self) {
         // protect ourself from re-entry
-        let _guard = self.barrier.lock().unwrap();
+        let _guard = self.barrier.lock();
         // tell the workers to wake their executor
-        self.workers.read().unwrap().iter().for_each(|(_, v)| {
+        self.workers.read().iter().for_each(|(_, v)| {
             v.wake_executor();
         });
     }
     // request stats
     fn request_stats(&self) {
-        self.workers.read().unwrap().iter().for_each(|(_, v)| {
+        self.workers.read().iter().for_each(|(_, v)| {
             if v.sender.send(SchedCmd::RequestStats).is_err() {
                 log::debug!("failed to send to executor")
             }
@@ -584,14 +584,14 @@ impl Executor {
 
     // notification that an executor completed and can be joined
     fn joinable_executor(&self, id: usize) {
-        if let Some(_worker) = self.parked_workers.write().unwrap().remove(&id) {
+        if let Some(_worker) = self.parked_workers.write().remove(&id) {
             log::debug!("dropping worker {}", id);
-        } else if self.workers.read().unwrap().contains_key(&id) {
+        } else if self.workers.read().contains_key(&id) {
             log::debug!("dropping worker {} is still in the workers table", id);
         } else {
             log::warn!("joinable executor {} isn't on any list", id);
         }
-        let live_count = self.workers.read().unwrap().len();
+        let live_count = self.workers.read().len();
         log::debug!("there are now {} live executors", live_count);
         self.wake_parked_threads();
     }
@@ -599,12 +599,12 @@ impl Executor {
     // dynamically add an executor
     fn add_executor(&self) {
         let (worker, thread_data) = self.new_worker();
-        self.workers.write().unwrap().insert(worker.id, worker);
-        let live_count = self.workers.read().unwrap().len();
-        self.stats.lock().unwrap().add_worker(live_count);
+        self.workers.write().insert(worker.id, worker);
+        let live_count = self.workers.read().len();
+        self.stats.lock().add_worker(live_count);
         let id = thread_data.id;
-        self.workers.write().unwrap().get_mut(&id).unwrap().thread = thread_data.spawn();
-        self.workers.read().unwrap().iter().for_each(|w| {
+        self.workers.write().get_mut(&id).unwrap().thread = thread_data.spawn();
+        self.workers.read().iter().for_each(|w| {
             if w.1.sender.send(SchedCmd::RebuildStealers).is_err() {
                 log::debug!("failed to send to executor");
             }
@@ -644,12 +644,12 @@ impl Executor {
         let mut threads = Vec::<ThreadData>::new();
         for _ in 0 .. self.worker_count {
             let (worker, thread_data) = self.new_worker();
-            self.workers.write().unwrap().insert(worker.id, worker);
+            self.workers.write().insert(worker.id, worker);
             threads.push(thread_data);
         }
         for thread in threads {
             let id = thread.id;
-            self.workers.write().unwrap().get_mut(&id).unwrap().thread = thread.spawn();
+            self.workers.write().get_mut(&id).unwrap().thread = thread.spawn();
         }
     }
 }
@@ -673,13 +673,13 @@ impl ExecutorControl for Executor {
 impl Drop for Executor {
     fn drop(&mut self) {
         log::info!("sending terminate to all workers");
-        for w in self.workers.write().unwrap().iter() {
+        for w in self.workers.write().iter() {
             if w.1.sender.send(SchedCmd::Terminate(false)).is_err() {
                 log::trace!("Failed to send terminate to worker");
             }
         }
         log::info!("synchronizing worker thread shutdown");
-        for w in self.workers.write().unwrap().iter_mut() {
+        for w in self.workers.write().iter_mut() {
             if let Some(thread) = w.1.thread.take() {
                 if thread.join().is_err() {
                     log::debug!("failed to join executor")

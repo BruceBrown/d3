@@ -1,7 +1,6 @@
-name: CI
+name: CI Check
 #
-# CI for a branch change, other than master.
-# This verifies build, test, fmt, and clippy w/ nightly
+# This performs a number of checks to ensure a smooth merge to master
 #
 on:
   push:
@@ -11,6 +10,7 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     strategy:
       matrix:
         rust:
@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-
+    
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
@@ -26,13 +26,17 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - uses: Swatinem/rust-cache@v1
+
+      # install vcpkg and let it help with SDL2 dependencies -- see Cargo.toml
+      - name: Install vcpkg
+        run: |
+          cargo install cargo-vcpkg
+          cargo vcpkg build
+
       - uses: actions-rs/cargo@v1
         with:
           command: build
-          
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
 
       - uses: actions-rs/cargo@v1
         with:

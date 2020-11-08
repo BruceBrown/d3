@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 #[allow(dead_code)]
 pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Option<ComponentSender>, ComponentError> {
     // ensure our service is configure in services
-    if !settings.services.contains("EchoServer") {
+    if !settings.services.contains("EchoService") {
         log::debug!("echo service is not configured");
         return Ok(None);
     }
@@ -30,18 +30,18 @@ pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Op
                     log::error!("Unable to parse {} into a SocketAddr", &coordinator.bind_addr);
                     continue;
                 }
-                log::debug!("echo server selected configuration: {:#?}", value);
+                log::debug!("echo service selected configuration: {:#?}", value);
                 let (m, sender) = executor::connect::<_, NetCmd>(coordinator);
                 // save out network sender until we give it away during start
-                m.lock().unwrap().my_sender.lock().unwrap().replace(sender);
+                m.lock().my_sender.lock().replace(sender);
                 let sender = executor::and_connect::<_, ComponentCmd>(&m);
                 return Ok(Some(sender));
             }
         }
     }
-    log::warn!("The configuration for the echo server coordinator was not found.");
+    log::warn!("The configuration for the echo service coordinator was not found.");
     Err(ComponentError::BadConfig(
-        "The configuration for the echo server coordinator was not found.".to_string(),
+        "The configuration for the echo service coordinator was not found.".to_string(),
     ))
 }
 
@@ -59,12 +59,12 @@ impl EchoCoordinator {
         // create an instance to handle the connection, the EchoInstance has two instruction sets.
         // Wire them both to the same instance.
         let (instance, sender) = executor::connect::<_, EchoCmd>(EchoInstance::new(conn_uuid, buf_size, self.net_sender.clone()));
-        instance.lock().unwrap().my_sender.lock().unwrap().replace(sender.clone());
+        instance.lock().my_sender.lock().replace(sender.clone());
         // the the other components that there's a new echo session nad how to contact the coordinator
         self.components.iter().for_each(|c| {
             send_cmd(
                 c.sender(),
-                ComponentCmd::NewSession(conn_uuid, "EchoServer".to_string(), Arc::new(sender.clone())),
+                ComponentCmd::NewSession(conn_uuid, "EchoService".to_string(), Arc::new(sender.clone())),
             )
         });
         // tell the network where to send connection control and data
@@ -77,7 +77,7 @@ impl Machine<ComponentCmd> for EchoCoordinator {
     fn receive(&self, cmd: ComponentCmd) {
         match cmd {
             ComponentCmd::Start => {
-                let my_sender = self.my_sender.lock().unwrap().take();
+                let my_sender = self.my_sender.lock().take();
                 send_cmd(
                     &self.net_sender,
                     NetCmd::BindListener(self.bind_addr.to_string(), my_sender.unwrap()),
@@ -109,7 +109,7 @@ impl Machine<NetCmd> for EchoCoordinator {
 // from there if flows into the consumer. The consumer flows it into
 // the producer and finally the producer flows it into the controller
 // where it is written out. Why so complex? well, later we'll change
-// one thing to turn it into a chat server.
+// one thing to turn it into a chat service.
 
 #[derive(Debug)]
 struct EchoInstance {
@@ -135,9 +135,9 @@ impl EchoInstance {
 
     fn close(&self, _conn_id: NetConnId) {
         // drop all, producer and my_sender should alerady be dropped
-        self.my_sender.lock().unwrap().take();
-        self.consumer.lock().unwrap().take();
-        self.producer.lock().unwrap().take();
+        self.my_sender.lock().take();
+        self.consumer.lock().take();
+        self.producer.lock().take();
     }
 
     fn new_data(&self, conn_uuid: u128, bytes: EchoData) {
@@ -150,36 +150,36 @@ impl EchoInstance {
     }
 
     fn add_consumer(&self, sender: EchoCmdSender) {
-        let ready = self.producer.lock().unwrap().is_some();
+        let ready = self.producer.lock().is_some();
         if ready {
             log::info!("getting producer and wiring");
-            let producer_sender = self.producer.lock().unwrap().take().unwrap();
+            let producer_sender = self.producer.lock().take().unwrap();
             self.wire_instances(sender, producer_sender);
         } else {
             log::info!("saving consumer");
-            self.consumer.lock().unwrap().replace(sender);
+            self.consumer.lock().replace(sender);
         }
     }
 
     fn add_producer(&self, sender: EchoCmdSender) {
-        let ready = self.consumer.lock().unwrap().is_some();
+        let ready = self.consumer.lock().is_some();
         if ready {
             log::info!("getting consumer and wiring");
-            let consumer_sender = self.consumer.lock().unwrap().take().unwrap();
+            let consumer_sender = self.consumer.lock().take().unwrap();
             self.wire_instances(consumer_sender, sender);
         } else {
             log::info!("saving producer");
-            self.producer.lock().unwrap().replace(sender);
+            self.producer.lock().replace(sender);
         }
     }
 
     // wire as follows:  self -> consumer -> producer -> self
     fn wire_instances(&self, consumer_sender: EchoCmdSender, producer_sender: EchoCmdSender) {
         // we send to the consumer, which sends to the producer, which sends back to us.
-        let my_sender = self.my_sender.lock().unwrap().take().unwrap();
+        let my_sender = self.my_sender.lock().take().unwrap();
         send_cmd(&producer_sender, EchoCmd::AddSink(self.conn_id, my_sender));
         send_cmd(&consumer_sender, EchoCmd::AddSink(self.conn_id, producer_sender));
-        self.consumer.lock().unwrap().replace(consumer_sender);
+        self.consumer.lock().replace(consumer_sender);
         log::info!("all wired, saved consumer");
     }
 
@@ -187,7 +187,7 @@ impl EchoInstance {
     fn received_bytes(&self, conn_id: NetConnId, bytes: Vec<u8>) {
         let conn_uuid: u128 = conn_id.try_into().unwrap();
         let bytes = Arc::new(bytes);
-        send_cmd(self.consumer.lock().unwrap().as_ref().unwrap(), EchoCmd::NewData(conn_uuid, bytes));
+        send_cmd(self.consumer.lock().as_ref().unwrap(), EchoCmd::NewData(conn_uuid, bytes));
     }
 }
 

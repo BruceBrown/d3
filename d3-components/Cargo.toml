@@ -4,7 +4,7 @@ name = "d3-components"
 # - Update CHANGELOG.md
 # - Update README.md
 # - Create "d3-X.Y.Z" git tag
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -22,18 +22,19 @@ exclude = ["/ci/*", "/bors.toml"]
 
 crossbeam = "0.8"
 smart-default = "0.6"
-mio = {version = "0.7", features=["os-poll", "tcp"]}
+mio = {version = "0.7", features=["os-poll", "tcp", "udp"]}
 atomic_refcell = "0.1"
-slab = "0.4"
+super-slab = "0.1"
 ringbuf = "0.2"
 log = "0.4"
 serde = "1.0"
 serde_derive = "1.0"
 config = "0.10"
 uuid = { version = "0.8", default-features = false, features = ["v4"] }
+parking_lot = "0.11"
 
-d3-core = {version = "0.1.2", path = "../d3-core"}
-d3-derive = {version = "0.1.2", path = "../d3-derive"}
+d3-core = {version = "0.1.3", path = "../d3-core"}
+d3-derive = {version = "0.1.3", path = "../d3-derive"}
 
 [dev-dependencies]
 simplelog = "0.8"

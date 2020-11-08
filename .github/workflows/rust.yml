@@ -11,6 +11,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         rust:
@@ -28,6 +29,14 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
         components: rustfmt, clippy
+
+    - uses: Swatinem/rust-cache@v1
+
+    # install vcpkg and let it help with SDL2 dependencies -- see Cargo.toml
+    - name: Install vcpkg
+      run: |
+        cargo install cargo-vcpkg
+        cargo vcpkg build
 
     - uses: actions-rs/cargo@v1
       with:

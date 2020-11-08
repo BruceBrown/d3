@@ -1,6 +1,8 @@
-use parking_lot::Mutex;
+//#[macro_use] extern crate smart_default;
+
+// use crossbeam::atomic::AtomicCell;
 use std::net::SocketAddr;
-use std::sync::Arc;
+// use uuid::Uuid;
 
 // Maybe turn this into a prelude?
 #[allow(unused_imports)]
@@ -13,18 +15,16 @@ use d3::{
         *,
     },
     core::{
-        executor::{self, stats::*, *},
+        executor::{self},
         machine_impl::*,
         *,
     },
     d3_derive::*,
 };
-pub mod monitor;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
+mod udp_echo;
+
+// export as udp_echo_service::configure
+pub mod udp_echo_coordinator {
+    pub use crate::udp_echo::configure;
 }

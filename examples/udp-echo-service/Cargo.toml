@@ -1,5 +1,5 @@
 [package]
-name = "monitor-service"
+name = "udp-echo-service"
 # When publishing a new version:
 # - Update CHANGELOG.md
 # - Update README.md
@@ -9,18 +9,16 @@ authors = ["Bruce Brown <brown.bruce1207@gmail.com>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/BruceBrown/d3/tree/master/examples/monitor-service"
+repository = "https://github.com/BruceBrown/d3/tree/master/examples/udp-echo-service"
 homepage = "https://github.com/BruceBrown/d3"
 #documentation = "https://docs.rs/d3"
-description = "A framework for server development -- example web service"
+description = "A framework for server development -- example udp echo service"
 keywords = ["non-blocking", "server", "framework"]
 categories = ["asynchronous", "concurrency"]
 exclude = ["/ci/*", "/bors.toml"]
 
 
 [dependencies]
-
 log = "0.4"
-parking_lot = "0.11"
 
 d3 = {path = "../../../d3"}

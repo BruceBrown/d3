@@ -66,7 +66,8 @@ pub trait MachineBuilder {
 /// ```
 /// # use d3_core::machine_impl::*;
 /// # use d3_derive::*;
-/// # use std::sync::{Arc,Mutex};
+/// # use std::sync::Arc;
+/// # use parking_lot::Mutex;
 /// # use d3_core::send_cmd;
 /// # #[derive(Debug,MachineImpl)] pub enum StateTable { Start, Stop }
 /// #

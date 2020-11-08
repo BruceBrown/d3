@@ -1,7 +1,7 @@
-//! The chat server producer.
+//! The chat service producer.
 //! Configuration is performed via the public configure function. This is the only public exposure.
 //!
-//! The theory of operation is that this component cooperates with other components to form a chat server.
+//! The theory of operation is that this component cooperates with other components to form a chat service.
 //! This is the producer component, which is wired between the consumer and coordinator. Although, it isn't
 //! actually aware of that wiring. It just receives instructions and acts accordingly.
 //!
@@ -63,7 +63,7 @@ impl Machine<ComponentCmd> for ProducerComponent {
 
     fn receive(&self, cmd: ComponentCmd) {
         match cmd {
-            ComponentCmd::NewSession(conn_uuid, service, any_sender) if service == "ChatServer" => {
+            ComponentCmd::NewSession(conn_uuid, service, any_sender) if service == "ChatService" => {
                 self.create_instance(conn_uuid, any_sender)
             },
             ComponentCmd::Start => (),
@@ -94,7 +94,7 @@ impl ChatInstance {
     // add a sink, as it turns out the only sink we add is to the coordinator
     fn add_sink(&self, conn_uuid: u128, sender: ChatSender) {
         log::debug!("producer {} adding sink {}", self.session_id, conn_uuid);
-        self.mutable.lock().unwrap().senders.push(sender);
+        self.mutable.lock().senders.push(sender);
     }
 
     // remove a sink. This justs gets forwarded to the coordinator
@@ -104,7 +104,7 @@ impl ChatInstance {
             log::warn!("producer {} asked to remove {}", self.session_id, conn_uuid);
             return;
         }
-        self.mutable.lock().unwrap().senders.iter().for_each(|s| {
+        self.mutable.lock().senders.iter().for_each(|s| {
             log::debug!("producer {} sending RemoveSink to coordinator", self.session_id);
             send_cmd(s, ChatCmd::RemoveSink(conn_uuid));
         });
@@ -112,7 +112,7 @@ impl ChatInstance {
 
     // new data is forwarded
     fn new_data(&self, _conn_id: u128, bytes: &Data) {
-        self.mutable.lock().unwrap().senders.iter().for_each(|s| {
+        self.mutable.lock().senders.iter().for_each(|s| {
             log::debug!("producer {} sending to coordinator", self.session_id);
             send_cmd(s, ChatCmd::NewData(self.session_id, Arc::clone(bytes)));
         });
@@ -123,7 +123,7 @@ impl Machine<ChatCmd> for ChatInstance {
     fn disconnected(&self) {
         log::info!("chat producer {} disconnected", self.session_id);
         // cleanup
-        let mut mutable = self.mutable.lock().unwrap();
+        let mut mutable = self.mutable.lock();
         mutable.senders.clear();
     }
 

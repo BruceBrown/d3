@@ -23,6 +23,7 @@ use d3_dev_instruction_sets::TestMessage;
 use d3_test_drivers::chaos_monkey::ChaosMonkeyDriver;
 use d3_test_drivers::daisy_chain::DaisyChainDriver;
 use d3_test_drivers::fanout_fanin::FanoutFaninDriver;
+use d3_test_drivers::TestDriver;
 
 pub fn bench(c: &mut Criterion) {
     setup();

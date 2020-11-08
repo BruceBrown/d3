@@ -93,7 +93,7 @@ impl MachineAdapter {
         }
         self.task_id.store(0, Ordering::SeqCst);
         // we already know that stale == taskid
-        log::trace!("cleared task {} stale {} for machine {}", stale, stale, self.get_key());
+        // log::trace!("cleared task {} stale {} for machine {}", stale, stale, self.get_key());
     }
     pub fn get_task_id(&self) -> usize { self.task_id.load(Ordering::SeqCst) }
     pub fn set_task_id(&self, id: usize) { self.task_id.store(id, Ordering::SeqCst); }

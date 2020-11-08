@@ -3,7 +3,7 @@
 # Run the echo server on locahhost port 9000
 # Run the chat server on localhost port 7000
 #
-#services = ["EchoServer", "ChatServer", "MonitorService", "AliceService"]
+services = ["EchoService", "UdpEchoService", "ChatService", "MonitorService", "AliceService"]
 features = []
 
 [executor]
@@ -20,6 +20,9 @@ tcp_address = "127.0.0.1:4000"
 
 [coordinator.EchoCoordinator]
 tcp_address = "127.0.0.1:9000"
+
+[coordinator.UdpEchoCoordinator]
+udp_address = "127.0.0.1:9001"
 
 [[coordinator]]
 [coordinator.ChatCoordinator]

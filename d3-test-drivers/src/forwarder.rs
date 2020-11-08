@@ -60,12 +60,12 @@ impl Forwarder {
 impl Machine<TestMessage> for Forwarder {
     fn disconnected(&self) {
         // drop senders
-        self.mutable.lock().as_mut().unwrap().drop_all_senders();
+        self.mutable.lock().drop_all_senders();
     }
 
     fn receive(&self, message: TestMessage) {
         // it a bit ugly, but its also a clean way to handle the data we need to access
-        let mut mutable = self.mutable.lock().unwrap();
+        let mut mutable = self.mutable.lock();
         // handle configuation messages without bumping counters
         match message {
             TestMessage::Notify(sender, on_receive_count) => {
@@ -75,6 +75,10 @@ impl Machine<TestMessage> for Forwarder {
             },
             TestMessage::AddSender(sender) => {
                 mutable.senders.push(sender);
+                return;
+            },
+            TestMessage::AddSenders(mut senders) => {
+                senders.drain(..).for_each(|s| mutable.senders.push(s));
                 return;
             },
             TestMessage::ForwardingMultiplier(count) => {
@@ -119,7 +123,7 @@ impl Machine<TestMessage> for Forwarder {
             TestMessage::TestData(_) => mutable.senders.iter().for_each(|sender| {
                 for _ in 0 .. mutable.forwarding_multiplier {
                     let count = self.send_count.fetch_add(1, Ordering::SeqCst);
-                    sender.send(TestMessage::TestData(count)).unwrap()
+                    sender.send(TestMessage::TestData(count)).unwrap();
                 }
             }),
             TestMessage::TestCallback(sender, mut test_struct) => {
@@ -128,14 +132,14 @@ impl Machine<TestMessage> for Forwarder {
             },
             _ => mutable.senders.iter().for_each(|sender| {
                 for _ in 0 .. mutable.forwarding_multiplier {
-                    sender.send(message.clone()).unwrap()
+                    sender.send(message.clone()).unwrap();
                 }
             }),
         };
         // send notification if we've met the criteria
-        // if mutable.notify_count != 0 {
-        // log::debug!("received {} out of {}", count, mutable.notify_count);
-        //}
+        if mutable.notify_count != 0 {
+            log::trace!("received {} out of {}", count, mutable.notify_count);
+        }
         if count == mutable.notify_count {
             // log::trace!("received {} out of {}", count, mutable.notify_count);
             if let Some(notifier) = mutable.notify_sender.as_ref() {

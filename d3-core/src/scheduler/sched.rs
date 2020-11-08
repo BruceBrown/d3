@@ -3,7 +3,7 @@ use super::*;
 
 use crossbeam::channel::RecvTimeoutError;
 
-type MachineMap = slab::Slab<ShareableMachine>;
+type MachineMap = super_slab::SuperSlab<ShareableMachine>;
 
 // The scheduler is responsible for the life-cycle of a machine.
 //
@@ -16,15 +16,15 @@ type MachineMap = slab::Slab<ShareableMachine>;
 //
 // Some thing of note:
 // * Crossbeam Deque is the task queue
-// * Slab is used as a container of machines.
+// * SuperSlab is used as a container of machines.
 //
 
 // Tuning for the scheduler, the count if for slab and map index sizing.
 #[allow(dead_code)]
 #[allow(non_upper_case_globals)]
 /// The machine_count_estimate is an estimate for the number of machines
-/// that will exist at any point in time. A Slab is used for tracking
-/// machines and mis-estimating will cause reallocation and data movement.
+/// that will exist at any point in time. A SuperSlab is used for tracking
+/// machines and mis-estimating will cause allocation.
 /// The default is 5000 machines.
 pub static machine_count_estimate: AtomicCell<usize> = AtomicCell::new(5000);
 
