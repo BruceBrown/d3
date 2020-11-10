@@ -6,11 +6,11 @@ use super::*;
 // A Task, actually a task for the executor
 #[doc(hidden)]
 pub struct Task {
-    pub id: usize,
-    pub start: Instant,
-    pub machine: ShareableMachine,
+    id: usize,
+    start: Instant,
+    machine: ShareableMachine,
     // indicates that a drop is in progress
-    pub drop: bool,
+    drop: bool,
 }
 impl Task {
     pub fn new(machine: &ShareableMachine, drop: bool) -> Self {
@@ -44,6 +44,7 @@ impl Task {
             drop,
         }
     }
+
     pub fn is_invalid(&self, executor_id: usize) -> bool {
         if self.id != self.machine.get_task_id() {
             log::error!(
@@ -58,6 +59,20 @@ impl Task {
             false
         }
     }
+
+    // ==== Getters and Predicates ====
+
+    #[inline]
+    pub fn elapsed(&self) -> Duration { self.start.elapsed() }
+
+    #[inline]
+    pub fn machine(&self) -> ShareableMachine { Arc::clone(&self.machine) }
+
+    #[inline]
+    pub const fn task_id(&self) -> usize { self.id }
+
+    #[inline]
+    pub const fn is_receiver_disconnected(&self) -> bool { self.drop }
 }
 static TASK_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -403,7 +418,7 @@ impl ExecutorData {
                 if let Ok(run_q) = Server::get_run_queue() {
                     schedule_task(Task::new(machine, drop), &run_q);
                 } else {
-                    log::debug!("unable to obtain run_queue");
+                    log::error!("unable to obtain run_queue");
                 }
             }
         });

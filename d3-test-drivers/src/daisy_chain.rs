@@ -25,14 +25,14 @@ pub struct DaisyChainDriver {
     pub duration: Duration,
 
     #[default(Vec::with_capacity(4010))]
-    senders: Vec<TestMessageSender>,
+    pub senders: Vec<TestMessageSender>,
 
-    first_sender: Option<TestMessageSender>,
-    receiver: Option<TestMessageReceiver>,
-    baseline: usize,
-    exepected_message_count: usize,
+    pub first_sender: Option<TestMessageSender>,
+    pub receiver: Option<TestMessageReceiver>,
+    pub baseline: usize,
+    pub exepected_message_count: usize,
     #[default(AtomicUsize::new(1))]
-    iteration: AtomicUsize,
+    pub iteration: AtomicUsize,
 }
 impl TestDriver for DaisyChainDriver {
     // setup the machines
@@ -87,10 +87,15 @@ impl TestDriver for DaisyChainDriver {
         log::debug!("daisy_chain: tear-down started");
         let baseline = daisy_chain.baseline;
         daisy_chain
+            .first_sender
+            .take()
+            .unwrap()
+            .send(TestMessage::RemoveAllSenders)
+            .unwrap();
+        daisy_chain
             .senders
             .drain(..)
             .for_each(|s| s.send(TestMessage::RemoveAllSenders).unwrap());
-        daisy_chain.first_sender = None;
         daisy_chain.receiver = None;
         drop(daisy_chain);
 

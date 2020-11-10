@@ -183,6 +183,18 @@ impl SchedulerThread {
         }
         stats.total_time = start.elapsed();
         log::info!("machines remaining: {}", self.machines.len());
+        // Dump the machine info
+        for (_, m) in self.machines.iter() {
+            log::info!(
+                "machine={} key={} state={:#?} q_len={} task_id={} disconnected={}",
+                m.get_id(),
+                m.get_key(),
+                m.get_state(),
+                m.channel_len(),
+                m.get_task_id(),
+                m.is_disconnected()
+            );
+        }
         log::info!("{:#?}", stats);
         log::info!("completed running schdeuler");
     }

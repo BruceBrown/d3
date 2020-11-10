@@ -51,3 +51,10 @@ jobs:
       - uses: actions-rs/cargo@v1
         with:
           command: bench
+
+      - name: Archive bench logs
+        uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: bench-logs
+          path: benches.log

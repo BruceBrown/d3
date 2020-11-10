@@ -50,13 +50,14 @@ where
 {
     /// The receive method receives instructions sent to it by itself or other machines.
     fn receive(&self, cmd: T);
-    /// The disconnected method is called to notify the machine that it has become disconnect and will no longer receive instructions.
+    /// The disconnected method is called to notify the machine that its receiver has become
+    /// disconnect; it will no longer receive instructions.
     /// This could be a result of server shutdown, or all senders dropping their senders.
     fn disconnected(&self) {}
     /// The connected method is called once, before receive messages. It provides a notification that the
     /// machine has become connected and may receive instructions. It includes a Uuid for the machine,
-    /// whic hmay be usedin logging. A machine implementing several instruction sets will receive a differnt
-    /// Uuid for each instruction set.
+    /// which may be used in logging. A machine implementing several instruction sets will receive a differnt
+    /// Uuid for each instruction set implemented.
     fn connected(&self, _uuid: Uuid) {}
 }
 

@@ -146,8 +146,10 @@ impl ThreadData {
     fn spawn(mut self) -> Option<std::thread::JoinHandle<()>> {
         let thread = std::thread::spawn(move || {
             self.setup();
-            let mut stats = ExecutorStats::default();
-            stats.id = self.id;
+            let mut stats = ExecutorStats {
+                id: self.id,
+                ..Default::default()
+            };
             let mut stats_event = SimpleEventTimer::default();
             let time_slice = get_time_slice();
             let backoff = LinearBackoff::new();
@@ -184,12 +186,16 @@ impl ThreadData {
                 if blocked_sender_count == 0 && !ran_task {
                     if backoff.is_completed() {
                         log::debug!("executor {} is sleeping", self.id);
-                        stats.sleep_count += 1;
                         let start = std::time::Instant::now();
-                        EXECUTORS_SNOOZING.fetch_add(1, Ordering::SeqCst);
-                        thread::park_timeout(stats_event.remaining());
-                        EXECUTORS_SNOOZING.fetch_sub(1, Ordering::SeqCst);
-                        stats.sleep_time += start.elapsed();
+                        let park_duration = stats_event.remaining();
+                        // sanity bailout
+                        if RUN_QUEUE_LEN.load(Ordering::SeqCst) == 0 {
+                            EXECUTORS_SNOOZING.fetch_add(1, Ordering::SeqCst);
+                            thread::park_timeout(park_duration);
+                            EXECUTORS_SNOOZING.fetch_sub(1, Ordering::SeqCst);
+                            stats.sleep_count += 1;
+                            stats.sleep_time += start.elapsed();
+                        }
                         log::debug!("executor {} is awake", self.id);
                     } else {
                         backoff.snooze();
@@ -330,21 +336,21 @@ impl ThreadData {
                 panic!("mismatched tasks")
             }
 
-            stats.time_on_queue += task.start.elapsed();
+            stats.time_on_queue += task.elapsed();
             // log::trace!("exec {} task for machine {}", self.id, task.machine.get_key());
 
             // setup TLS in case we have to park
-            let machine = task.machine;
-            let task_id = task.id;
+            let machine = task.machine();
+            let task_id = task.task_id();
             tls_executor_data.with(|t| {
                 let mut tls = t.borrow_mut();
-                tls.machine = ExecutorDataField::Machine(Arc::clone(&machine));
+                tls.machine = ExecutorDataField::Machine(task.machine());
                 tls.task_id = task_id;
             });
 
             // log::trace!("exec {} run_q {}, begin recv machine {}", self.id, task.id, machine.get_key());
             let t = Instant::now();
-            machine.receive_cmd(&machine, task.drop, time_slice, stats);
+            machine.receive_cmd(&machine, task.is_receiver_disconnected(), time_slice, stats);
             stats.recv_time += t.elapsed();
             if machine.get_state() == MachineState::SendBlock {
                 stats.blocked_senders += 1;
@@ -372,57 +378,37 @@ impl ThreadData {
     }
 
     fn reschedule(&self, machine: ShareableMachine) {
-        // handle the death of a machine
-        if machine.is_dead() {
-            let cmd = SchedCmd::Remove(machine.get_key());
-            if self.scheduler.send(cmd).is_err() {
-                log::info!("failed to send cmd to scheduler")
-            }
-            return;
-        }
-
-        if machine.is_channel_empty() && !machine.is_disconnected() {
-            if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::RecvBlock) {
-                match state {
-                    // SendBlock is valid here
-                    MachineState::SendBlock => (),
-                    _ => log::error!(
-                        "exec {} machine {} expected state Running, found {:#?}",
-                        self.id,
-                        machine.get_key(),
-                        state
-                    ),
+        // handle cases in which we'll not reschedule
+        match machine.get_state() {
+            MachineState::Dead => {
+                let cmd = SchedCmd::Remove(machine.get_key());
+                if self.scheduler.send(cmd).is_err() {
+                    log::info!("failed to send cmd to scheduler")
                 }
-            }
-            std::sync::atomic::fence(Ordering::SeqCst);
-            if machine.is_channel_empty() {
                 return;
-            }
-            if machine
+            },
+            MachineState::Running => (),
+            MachineState::SendBlock => return,
+            state => log::warn!("reschedule unexpected state {:#?}", state),
+        }
+        // mark it RecvBlock, and then check if it should be scheduled
+        if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::RecvBlock) {
+            log::error!(
+                "exec {} machine {} expected state Running, found {:#?}",
+                self.id,
+                machine.get_key(),
+                state
+            );
+        }
+        // if disconnected or if the channel has data, try to schedule
+        if (!machine.is_channel_empty() || machine.is_disconnected())
+            && machine
                 .compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready)
                 .is_ok()
-            {
-                schedule_machine(&machine, &self.run_queue);
-            }
-            return;
-        }
-
-        // the channel isn't empty, or it has been disconnected, see if already ready, if it is then return
-        match machine.compare_and_exchange_state(MachineState::Running, MachineState::Ready) {
-            // exhausted time-slice
-            Ok(_) => {
-                // log::info!("exec {} Running to Ready machine {}", self.id, machine.get_key());
-                schedule_machine(&machine, &self.run_queue);
-            },
-            // another machine sent, and will add task
-            Err(MachineState::Ready) => (),
-            Err(MachineState::RecvBlock) => (),
-            // parked due to sender full
-            Err(MachineState::SendBlock) => (),
-            // dead already handled
-            Err(MachineState::Dead) => (),
-            // anything else we need to know about
-            Err(state) => log::error!("ignoring {:#?}", state),
+        {
+            // log::trace!("reschedule machine {} q_len {} is_disconnected {}",
+            // machine.get_key(), machine.channel_len(), machine.is_disconnected());
+            schedule_machine(&machine, &self.run_queue);
         }
     }
 }

@@ -85,12 +85,14 @@ fn run_daisy_chain(settings: &ForwarderSettings) {
     let params = RunParams::from(fields);
     log::info!("daisy_chain: {:?}", params);
 
-    let mut daisy_chain = DaisyChainDriver::default();
-    daisy_chain.machine_count = params.machine_count;
-    daisy_chain.message_count = params.messages;
-    daisy_chain.bound_queue = !params.unbound_queue;
-    daisy_chain.forwarding_multiplier = params.forwarding_multiplier;
-    daisy_chain.duration = params.timeout;
+    let mut daisy_chain = DaisyChainDriver {
+        machine_count: params.machine_count,
+        message_count: params.messages,
+        bound_queue: !params.unbound_queue,
+        forwarding_multiplier: params.forwarding_multiplier,
+        duration: params.timeout,
+        ..Default::default()
+    };
 
     daisy_chain.setup();
     let t = std::time::Instant::now();
@@ -109,12 +111,13 @@ fn run_fanout_fanin(settings: &ForwarderSettings) {
     let params = RunParams::from(fields);
     log::info!("fanout_fanin: {:?}", params);
 
-    let mut fanout_fanin = FanoutFaninDriver::default();
-    fanout_fanin.machine_count = params.machine_count;
-    fanout_fanin.message_count = params.messages;
-    fanout_fanin.bound_queue = !params.unbound_queue;
-
-    fanout_fanin.duration = params.timeout;
+    let mut fanout_fanin = FanoutFaninDriver {
+        machine_count: params.machine_count,
+        message_count: params.messages,
+        bound_queue: !params.unbound_queue,
+        duration: params.timeout,
+        ..Default::default()
+    };
 
     fanout_fanin.setup();
     log::debug!("fanout_fanin: starting run");
@@ -140,12 +143,14 @@ fn run_chaos_monkey(settings: &ForwarderSettings) {
     let inflection_value = *fields.get(&settings::Field::inflection_value).unwrap_or(&1usize);
     log::info!("chaos_monkey: {:?}, inflection_value {}", params, inflection_value);
 
-    let mut chaos_monkey = ChaosMonkeyDriver::default();
-    chaos_monkey.machine_count = params.machine_count;
-    chaos_monkey.message_count = params.messages;
-    chaos_monkey.bound_queue = !params.unbound_queue;
-    chaos_monkey.duration = params.timeout;
-    chaos_monkey.inflection_value = inflection_value as u32;
+    let mut chaos_monkey = ChaosMonkeyDriver {
+        machine_count: params.machine_count,
+        message_count: params.messages,
+        bound_queue: !params.unbound_queue,
+        duration: params.timeout,
+        inflection_value: inflection_value as u32,
+        ..Default::default()
+    };
 
     chaos_monkey.setup();
     log::debug!("chaos_monkey: starting run");

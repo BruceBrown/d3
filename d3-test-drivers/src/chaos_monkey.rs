@@ -37,9 +37,9 @@ pub struct ChaosMonkeyDriver {
     pub duration: Duration,
 
     #[default(Vec::with_capacity(2010))]
-    senders: Vec<TestMessageSender>,
-    receiver: Option<TestMessageReceiver>,
-    baseline: usize,
+    pub senders: Vec<TestMessageSender>,
+    pub receiver: Option<TestMessageReceiver>,
+    pub baseline: usize,
 }
 
 impl TestDriver for ChaosMonkeyDriver {
@@ -85,10 +85,10 @@ impl TestDriver for ChaosMonkeyDriver {
         log::debug!("chaos_monkey: tear-down started");
         let baseline = chaos_monkey.baseline;
         // due to a sender pointing to its own receiver, we need to dismantle senders.
-        for s in &chaos_monkey.senders {
-            s.send(TestMessage::RemoveAllSenders).unwrap();
-        }
-        chaos_monkey.senders.clear();
+        chaos_monkey
+            .senders
+            .drain(..)
+            .for_each(|s| s.send(TestMessage::RemoveAllSenders).unwrap());
         chaos_monkey.receiver = None;
         drop(chaos_monkey);
 

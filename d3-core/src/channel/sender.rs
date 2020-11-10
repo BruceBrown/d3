@@ -138,21 +138,27 @@ where
                 machine.set_disconnected();
                 match machine.compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready) {
                     Ok(_) => ExecutorData::schedule(&machine, true),
-                    Err(MachineState::New) => log::debug!("dropping sender, while machine is new"),
-                    Err(MachineState::Running) => log::debug!(
+                    Err(MachineState::New) => log::info!("dropping sender, while machine is new"),
+                    Err(MachineState::Running) => log::info!(
                         "dropping sender {} machine {} state {:#?}, not sched",
                         self.channel_id,
                         machine.get_key(),
                         MachineState::Running,
                     ),
-                    Err(MachineState::Ready) => log::debug!(
+                    Err(MachineState::Ready) => log::info!(
                         "dropping sender {} machine {} state {:#?}, not sched",
                         self.channel_id,
                         machine.get_key(),
                         MachineState::Ready,
                     ),
                     Err(state) => {
-                        log::trace!("drop chan {} state {:#?} q_len {}", self.channel_id, state, self.sender.len());
+                        log::info!(
+                            "droping sender {} machine {} state {:#?} q_len {}",
+                            self.channel_id,
+                            machine.get_key(),
+                            state,
+                            self.sender.len()
+                        );
                     },
                 }
             }

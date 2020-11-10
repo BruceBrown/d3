@@ -22,13 +22,13 @@ pub struct FanoutFaninDriver {
     pub duration: Duration,
 
     #[default(Vec::with_capacity(510))]
-    senders: Vec<TestMessageSender>,
+    pub senders: Vec<TestMessageSender>,
 
-    fanout_sender: Option<TestMessageSender>,
-    receiver: Option<TestMessageReceiver>,
-    baseline: usize,
+    pub fanout_sender: Option<TestMessageSender>,
+    pub receiver: Option<TestMessageReceiver>,
+    pub baseline: usize,
     #[default(AtomicUsize::new(1))]
-    iteration: AtomicUsize,
+    pub iteration: AtomicUsize,
 }
 impl TestDriver for FanoutFaninDriver {
     // setup the machines
@@ -70,13 +70,20 @@ impl TestDriver for FanoutFaninDriver {
     }
 
     // tear down the machines
-    fn teardown(fanout_fanin: Self) {
+    fn teardown(mut fanout_fanin: Self) {
         log::debug!("fanout_fanin: tear-down started");
         let baseline = fanout_fanin.baseline;
-        for s in &fanout_fanin.senders {
-            s.send(TestMessage::RemoveAllSenders).unwrap();
-        }
-        // drop, wiping out all senders/receivers/machines
+        fanout_fanin
+            .fanout_sender
+            .take()
+            .unwrap()
+            .send(TestMessage::RemoveAllSenders)
+            .unwrap();
+        fanout_fanin
+            .senders
+            .drain(..)
+            .for_each(|s| s.send(TestMessage::RemoveAllSenders).unwrap());
+        fanout_fanin.receiver = None;
         drop(fanout_fanin);
 
         // wait for the machines to all go away

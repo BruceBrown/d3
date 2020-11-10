@@ -1,12 +1,12 @@
 //! These are the Benchmarks. We may have already done 80% of the work to minimize the time spent in
 //! overhead activities, such as scheduling and executing. Now, as things change, we need to run
-//! benchmarks to ensure things don't degrade.
+//! benchmarks to monitor regressions.
 //!
 //! Once again, our old friend, the forwrder will help. We're going to run 4 benchmarks:
 //! * create_destroy, where we create 4000 machines and destroy 4000 machines.
 //! * daisy_chain, which send a pulse of messages to machines, stressing the executor message management.
 //! * fanout-fanin, which causes send blocking, stressing the executor send blocking management.
-//! * chaos-monkey, which causes random machines to have to send messages, stessing the scheduler.
+//! * chaos-monkey, which causes random machines to have to send messages, stessing the channel sender.
 
 #![allow(dead_code)]
 
@@ -30,7 +30,8 @@ pub fn bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("sched_exec_tests");
     // try to limit the length of test runs
     // group.significance_level(0.1).sample_size(10).measurement_time(Duration::from_secs(30));
-    group.significance_level(0.1);
+    group.significance_level(0.1).sample_size(10);
+    // group.significance_level(0.1);
 
     group.bench_function("create_destroy_2000_machines", |b| b.iter(create_destroy_2000_machines));
 
@@ -93,8 +94,12 @@ criterion_main!(benches);
 
 fn setup() {
     use simplelog::*;
-    // install a simple logger
-    CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).unwrap();
+    // install a terminal logger, backed by a trace log
+    CombinedLogger::init(vec![
+        TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed),
+        WriteLogger::new(LevelFilter::Info, Config::default(), std::fs::File::create("benches.log").unwrap()),
+    ])
+    .unwrap();
     executor::set_machine_count_estimate(5000);
     executor::set_default_channel_capacity(500);
     executor::start_server();

@@ -101,7 +101,9 @@ impl Server {
     }
 
     pub fn get_run_queue() -> Result<TaskInjector, ()> {
-        if server_state.load() != ServerState::Running {
+        let state = server_state.load();
+        if state != ServerState::Running {
+            log::error!("Server not running ({:#?}), unable to obtain run_q", state);
             return Err(());
         }
         match &server.borrow().executor {

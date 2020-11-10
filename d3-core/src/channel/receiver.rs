@@ -70,6 +70,16 @@ where
 
 impl<T> Eq for Receiver<T> where T: MachineImpl {}
 
+impl<T> Drop for Receiver<T>
+where
+    T: MachineImpl,
+{
+    // while there can be any numbers of senders, by design, there can only be one receiver per channel
+    fn drop(&mut self) {
+        log::debug!("Receiver: dropped receiver {}", self.get_id());
+    }
+}
+
 pub fn wrap_receiver<T>(receiver: crossbeam::channel::Receiver<T>, channel_id: usize, connection: ThreadSafeConnection) -> Receiver<T>
 where
     T: MachineImpl,

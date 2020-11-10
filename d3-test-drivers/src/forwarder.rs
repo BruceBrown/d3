@@ -42,7 +42,7 @@ impl ForwarderMutable {
     fn get_monkey_fwd(&mut self) -> usize { self.range.sample(&mut self.rng) }
     fn drop_all_senders(&mut self) {
         self.senders.clear();
-        let _ = self.notify_sender.take();
+        self.notify_sender = None;
     }
 }
 
