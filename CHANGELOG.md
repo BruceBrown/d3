@@ -5,6 +5,7 @@
 * Move version to v0.1.3 for all crates.
 * Switch from slab::Slab to super_slab::SuperSlab to handle machine growth
 * Added an example, Conway's Game of Life, as an example of using machines as game elements.
+* Fixed a data-race that would occasionally leave machines alive with no Senders.
 
 ## Performance and UDP
 

@@ -154,7 +154,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                             count += 1;
                         },
                         Err(crossbeam::channel::TryRecvError::Empty) => {
-                            if drop {
+                            if drop || machine.is_disconnected() {
                                 // treat as disconnected
                                 log::trace!("exec: machine {} disconnected, cleaning up", machine.get_key());
                                 self.machine.disconnected();

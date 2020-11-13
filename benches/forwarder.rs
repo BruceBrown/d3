@@ -30,10 +30,12 @@ pub fn bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("sched_exec_tests");
     // try to limit the length of test runs
     // group.significance_level(0.1).sample_size(10).measurement_time(Duration::from_secs(30));
-    group.significance_level(0.1).sample_size(10);
-    // group.significance_level(0.1);
+    // group.significance_level(0.1).sample_size(10);
+    group.significance_level(0.1);
 
+    log::info!("create_destroy_2000_machines: setup complete");
     group.bench_function("create_destroy_2000_machines", |b| b.iter(create_destroy_2000_machines));
+    log::info!("create_destroy_2000_machines: tear-down complete");
 
     let mut fanout_fanin = FanoutFaninDriver::default();
     fanout_fanin.setup();
@@ -73,22 +75,6 @@ pub fn bench(c: &mut Criterion) {
     teardown();
 }
 
-pub fn bench_arc(c: &mut Criterion) {
-    let mut group = c.benchmark_group("arc_tests");
-
-    // try to limit the length of test runs
-    group
-        .significance_level(0.1)
-        .sample_size(10)
-        .measurement_time(Duration::from_secs(30));
-
-    group.bench_function("arc_test", |b| b.iter(arc_test));
-    group.bench_function("unwrap_arc_test", |b| b.iter(unwrap_arc_test));
-    group.bench_function("no_arc_test", |b| b.iter(no_arc_test));
-
-    group.finish();
-}
-
 criterion_group!(benches, bench);
 criterion_main!(benches);
 
@@ -97,7 +83,7 @@ fn setup() {
     // install a terminal logger, backed by a trace log
     CombinedLogger::init(vec![
         TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed),
-        WriteLogger::new(LevelFilter::Info, Config::default(), std::fs::File::create("benches.log").unwrap()),
+        // WriteLogger::new(LevelFilter::Info, Config::default(), std::fs::File::create("benches.log").unwrap()),
     ])
     .unwrap();
     executor::set_machine_count_estimate(5000);
@@ -114,11 +100,11 @@ fn teardown() {
 #[allow(non_upper_case_globals)]
 static alice_generation: AtomicUsize = AtomicUsize::new(0);
 
-// A simple Alice machine
-struct Alice {
+// A simple Bob machine
+struct Bob {
     id: usize,
 }
-impl Machine<TestMessage> for Alice {
+impl Machine<TestMessage> for Bob {
     fn receive(&self, _message: TestMessage) {}
 }
 
@@ -127,10 +113,10 @@ fn create_destroy_2000_machines() {
     let machine_count = 2000;
     // create the machines, save the sender
     for _ in 1 ..= machine_count {
-        let alice = Alice {
+        let bob = Bob {
             id: alice_generation.fetch_add(1, Ordering::SeqCst),
         };
-        let (_, _) = executor::connect(alice);
+        let (_, _) = executor::connect(bob);
     }
     // wait for the scheduler/executor to fully drop them
     let mut start = std::time::Instant::now();
@@ -144,86 +130,4 @@ fn create_destroy_2000_machines() {
             log::debug!("baseline 0, count {}", executor::get_machine_count());
         }
     }
-}
-
-fn arc_test() {
-    use crossbeam::deque::Injector;
-    use crossbeam::deque::Steal::{Empty, Success};
-    use crossbeam::thread::scope;
-    use std::sync::Arc;
-
-    const COUNT: usize = 2_500_000;
-    let q = Arc::new(Injector::<usize>::new());
-    scope(|scope| {
-        scope.spawn(|_| {
-            for i in 0 .. COUNT {
-                loop {
-                    if let Success(v) = q.steal() {
-                        assert_eq!(i, v);
-                        break;
-                    }
-                }
-            }
-            assert_eq!(q.steal(), Empty);
-        });
-        for i in 0 .. COUNT {
-            q.push(i);
-        }
-    })
-    .unwrap();
-}
-
-fn unwrap_arc_test() {
-    use crossbeam::deque::Injector;
-    use crossbeam::deque::Steal::{Empty, Success};
-    use crossbeam::thread::scope;
-    use std::sync::Arc;
-
-    const COUNT: usize = 2_500_000;
-    let q = Arc::new(Injector::<usize>::new());
-    let q2 = Arc::clone(&q);
-    scope(|scope| {
-        scope.spawn(|_| {
-            let q2_ref: &Injector<usize> = &*q2;
-            for i in 0 .. COUNT {
-                loop {
-                    if let Success(v) = q2_ref.steal() {
-                        assert_eq!(i, v);
-                        break;
-                    }
-                }
-            }
-            assert_eq!(q2_ref.steal(), Empty);
-        });
-        let q_ref: &Injector<usize> = &*q;
-        for i in 0 .. COUNT {
-            q_ref.push(i);
-        }
-    })
-    .unwrap();
-}
-fn no_arc_test() {
-    use crossbeam::deque::Injector;
-    use crossbeam::deque::Steal::{Empty, Success};
-    use crossbeam::thread::scope;
-
-    const COUNT: usize = 2_500_000;
-    let q = Injector::<usize>::new();
-    scope(|scope| {
-        scope.spawn(|_| {
-            for i in 0 .. COUNT {
-                loop {
-                    if let Success(v) = q.steal() {
-                        assert_eq!(i, v);
-                        break;
-                    }
-                }
-            }
-            assert_eq!(q.steal(), Empty);
-        });
-        for i in 0 .. COUNT {
-            q.push(i);
-        }
-    })
-    .unwrap();
 }

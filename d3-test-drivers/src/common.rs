@@ -50,7 +50,7 @@ pub fn wait_for_machine_setup(machine_count: usize) -> Result<(), ()> {
 }
 
 // wait for the machine count to be reduced to the provided count
-pub fn wait_for_machine_teardown(machine_count: usize) -> Result<(), ()> {
+pub fn wait_for_machine_teardown(test_name: &str, machine_count: usize) -> Result<(), ()> {
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(10) {
         thread::sleep(Duration::from_nanos(50));
@@ -60,7 +60,8 @@ pub fn wait_for_machine_teardown(machine_count: usize) -> Result<(), ()> {
     }
     if log_enabled!(log::Level::Error) {
         log::error!(
-            "wait_for_machine_teardown failed: count={}, expecting={}",
+            "wait_for_machine_teardown failed: for {} count={}, expecting={}",
+            test_name,
             executor::get_machine_count(),
             machine_count
         );

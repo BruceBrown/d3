@@ -79,7 +79,7 @@ impl TestDriver for DaisyChainDriver {
         if wait_for_machine_setup(self.baseline + self.machine_count - 1).is_err() {
             panic!("daisy_chain: machine setup failed");
         }
-        log::debug!("daisy_chain: setup complete");
+        log::info!("daisy_chain: setup complete");
     }
 
     // tear down the machines
@@ -100,10 +100,10 @@ impl TestDriver for DaisyChainDriver {
         drop(daisy_chain);
 
         // wait for the machines to all go away
-        if wait_for_machine_teardown(baseline).is_err() {
+        if wait_for_machine_teardown("daisy_chain", baseline).is_err() {
             panic!("daisy_chain: machine tear-down failed");
         }
-        log::debug!("daisy_chain: tear-down complete");
+        log::info!("daisy_chain: tear-down complete");
     }
 
     // run a single iteration

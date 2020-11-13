@@ -14,6 +14,7 @@ use crossbeam::channel::{SendError, SendTimeoutError, TrySendError};
 /// is just boilerplate wrapping
 pub struct Sender<T: MachineImpl> {
     channel_id: usize,
+    clone_count: Arc<AtomicUsize>,
     connection: ThreadSafeConnection,
     pub sender: crossbeam::channel::Sender<T>,
     receiver_machine: WeakShareableMachine,
@@ -107,11 +108,8 @@ where
     }
 
     pub fn is_full(&self) -> bool { self.sender.is_full() }
-
     pub fn len(&self) -> usize { self.sender.len() }
-
     pub fn is_empty(&self) -> bool { self.sender.is_empty() }
-
     pub fn capacity(&self) -> Option<usize> { self.sender.capacity() }
 }
 
@@ -127,40 +125,20 @@ where
     T: MachineImpl,
 {
     fn drop(&mut self) {
+        if 0 != self.clone_count.fetch_sub(1, Ordering::SeqCst) {
+            return;
+        }
         if let Some(machine) = self.receiver_machine.upgrade() {
-            if Arc::strong_count(&self.connection) == 1 {
-                log::trace!(
-                    "dropping sender {} machine {} state {:#?}",
-                    self.channel_id,
-                    machine.get_key(),
-                    machine.get_state()
-                );
-                machine.set_disconnected();
-                match machine.compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready) {
-                    Ok(_) => ExecutorData::schedule(&machine, true),
-                    Err(MachineState::New) => log::info!("dropping sender, while machine is new"),
-                    Err(MachineState::Running) => log::info!(
-                        "dropping sender {} machine {} state {:#?}, not sched",
-                        self.channel_id,
-                        machine.get_key(),
-                        MachineState::Running,
-                    ),
-                    Err(MachineState::Ready) => log::info!(
-                        "dropping sender {} machine {} state {:#?}, not sched",
-                        self.channel_id,
-                        machine.get_key(),
-                        MachineState::Ready,
-                    ),
-                    Err(state) => {
-                        log::info!(
-                            "droping sender {} machine {} state {:#?} q_len {}",
-                            self.channel_id,
-                            machine.get_key(),
-                            state,
-                            self.sender.len()
-                        );
-                    },
-                }
+            machine.set_disconnected();
+            match machine.compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready) {
+                Ok(_) => {
+                    ExecutorData::schedule(&machine, true);
+                },
+                Err(MachineState::New) => (),
+                Err(MachineState::Ready) => (),
+                Err(MachineState::Running) => (),
+                Err(MachineState::Dead) => (),
+                Err(state) => panic!("sender drop not expecting receiver state {:#?}", state),
             }
         }
     }
@@ -171,8 +149,10 @@ where
     T: MachineImpl,
 {
     fn clone(&self) -> Self {
+        self.clone_count.fetch_add(1, Ordering::SeqCst);
         Self {
             channel_id: self.channel_id,
+            clone_count: Arc::clone(&self.clone_count),
             connection: Arc::clone(&self.connection),
             sender: self.sender.clone(),
             receiver_machine: Weak::clone(&self.receiver_machine),
@@ -196,6 +176,7 @@ where
     log::trace!("creating sender {}", channel_id);
     Sender::<T> {
         channel_id,
+        clone_count: Arc::new(AtomicUsize::new(0)),
         connection,
         sender,
         receiver_machine: Weak::new(),

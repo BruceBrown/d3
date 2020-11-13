@@ -144,13 +144,14 @@ fn wait_for_ownership(curr: ServerState, new: ServerState, duration: Duration) -
 /// that are connected to the collective.
 pub fn start_server() {
     log::info!("starting server");
-    // tests sometimes run in parallel, even with --jobs 1, so we wait
+    // tests sometimes run in parallel, so we wait
     let res = wait_for_ownership(ServerState::Stopped, ServerState::Initializing, Duration::from_secs(5));
     if res.is_err() {
         log::error!("force stopping server, current state is {:#?}", server_state.load());
         stop_server();
     }
     log::info!("aquired server");
+    reset_core();
     if get_executor_count() == 0 {
         let num = num_cpus::get();
         // Give them all to the executor, everything else is low-cost overhead
@@ -203,6 +204,14 @@ pub fn stop_server() {
 
     server_state.store(ServerState::Stopped);
     log::info!("server is now stopped");
+}
+
+fn reset_core() {
+    channel::machine_channel::CHANNEL_ID.store(1, Ordering::SeqCst);
+    executor::RUN_QUEUE_LEN.store(0, Ordering::SeqCst);
+    executor::EXECUTORS_SNOOZING.store(0, Ordering::SeqCst);
+    sched::live_machine_count.store(0, Ordering::SeqCst);
+    tls::tls_executor::TASK_ID.store(1, Ordering::SeqCst);
 }
 
 #[doc(hidden)]

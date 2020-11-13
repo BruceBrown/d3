@@ -66,7 +66,7 @@ impl TestDriver for FanoutFaninDriver {
         if wait_for_machine_setup(self.baseline + self.machine_count - 1).is_err() {
             panic!("fanout_fanin: machine setup failed");
         }
-        log::debug!("fanout_fanin: setup complete");
+        log::info!("fanout_fanin: setup complete");
     }
 
     // tear down the machines
@@ -87,10 +87,10 @@ impl TestDriver for FanoutFaninDriver {
         drop(fanout_fanin);
 
         // wait for the machines to all go away
-        if wait_for_machine_teardown(baseline).is_err() {
+        if wait_for_machine_teardown("fanout_fanin", baseline).is_err() {
             panic!("fanout_fanin: machine tear-down failed");
         }
-        log::debug!("fanout_fanin: tear-down complete");
+        log::info!("fanout_fanin: tear-down complete");
     }
 
     // run a single iteration

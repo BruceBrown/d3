@@ -77,7 +77,7 @@ impl TestDriver for ChaosMonkeyDriver {
         if wait_for_machine_setup(self.baseline + self.machine_count - 1).is_err() {
             panic!("chaos_monkey: machine setup failed");
         }
-        log::debug!("chaos_monkey: setup complete");
+        log::info!("chaos_monkey: setup complete");
     }
 
     // tear down the machines
@@ -93,10 +93,10 @@ impl TestDriver for ChaosMonkeyDriver {
         drop(chaos_monkey);
 
         // wait for the machines to all go away
-        if wait_for_machine_teardown(baseline).is_err() {
+        if wait_for_machine_teardown("chaos_monkey", baseline).is_err() {
             panic!("chaos_monkey: machine tear-down failed");
         }
-        log::debug!("chaos_monkey: tear-down complete");
+        log::info!("chaos_monkey: tear-down complete");
     }
 
     // run a single iteration

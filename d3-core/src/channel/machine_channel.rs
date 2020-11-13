@@ -10,7 +10,7 @@ use super::*;
 /// only types that derive from MachineImpl.
 
 /// The channel id can be used in logging, otherwise its useless
-static CHANNEL_ID: AtomicUsize = AtomicUsize::new(1);
+pub static CHANNEL_ID: AtomicUsize = AtomicUsize::new(1);
 
 /// Create a channel with a fixed capacity.
 pub fn channel_with_capacity<T>(capacity: usize) -> (Sender<T>, Receiver<T>)

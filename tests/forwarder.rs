@@ -19,9 +19,6 @@ mod tests {
     use d3_test_drivers::forwarder::Forwarder;
     use d3_test_drivers::TestDriver;
 
-    // use simplelog::*;
-    // use std::fs::File;
-
     // common function for wrapping a test with setup/teardown logic
     pub fn run_test<T>(test: T)
     where
@@ -41,10 +38,12 @@ mod tests {
         teardown();
         assert!(result.is_ok())
     }
+
     fn setup() {
         info!("setup starting server");
         executor::start_server()
     }
+
     fn teardown() {
         info!("teardown stopping server");
         executor::stop_server();
@@ -187,6 +186,7 @@ mod tests {
         // Previous tests was a proof of functionality. Now, we're going to stress things.
         run_test(|| {
             log::info!("daisy_chain running");
+            assert_eq!(executor::get_machine_count(), 0);
             let mut daisy_chain = DaisyChainDriver::default();
             daisy_chain.machine_count = 1000;
             daisy_chain.message_count = 10;
@@ -208,6 +208,7 @@ mod tests {
         // Previous tests was a proff of functionality. Now, we're going to stress things.
         run_test(|| {
             log::info!("multiplier running");
+            assert_eq!(executor::get_machine_count(), 0);
             let mut daisy_chain = DaisyChainDriver::default();
             daisy_chain.machine_count = 7;
             daisy_chain.message_count = 1;
@@ -226,6 +227,7 @@ mod tests {
     fn fanout_fanin() {
         run_test(|| {
             log::info!("fanout_fanin running");
+            assert_eq!(executor::get_machine_count(), 0);
             let mut fanout_fanin = FanoutFaninDriver::default();
             fanout_fanin.machine_count = 500;
             fanout_fanin.message_count = 15;
@@ -242,8 +244,22 @@ mod tests {
 
     #[test]
     fn chaos_monkey() {
+        // use simplelog::*;
+        // use std::fs::File;
+        // if let Err(err) = CombinedLogger::init(vec![
+        // TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed),
+        // WriteLogger::new(LevelFilter::Trace, Config::default(), File::create("rust_test.log").unwrap()),
+        // ]) {
+        // println!("logging init error: {}", err);
+        // }
         run_test(|| {
-            log::info!("chaos_monkey running");
+            let machine_count = executor::get_machine_count();
+            if machine_count != 0 {
+                log::error!("chaos_monkey expecting machine_count of 0, found {}", machine_count);
+                executor::stats::request_machine_info();
+                thread::sleep(Duration::from_secs(2));
+                assert_eq!(machine_count, 0);
+            }
             let mut chaos_monkey = ChaosMonkeyDriver::default();
             chaos_monkey.machine_count = 1000;
             chaos_monkey.message_count = 50;

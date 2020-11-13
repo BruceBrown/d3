@@ -74,7 +74,7 @@ impl Task {
     #[inline]
     pub const fn is_receiver_disconnected(&self) -> bool { self.drop }
 }
-static TASK_ID: AtomicUsize = AtomicUsize::new(1);
+pub static TASK_ID: AtomicUsize = AtomicUsize::new(1);
 
 // A task for the scheduler, which will reschedule the machine
 pub struct SchedTask {

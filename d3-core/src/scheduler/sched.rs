@@ -85,6 +85,7 @@ impl DefaultScheduler {
     }
     // create the scheduler
     pub fn new(sender: SchedSender, receiver: SchedReceiver, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Self {
+        live_machine_count.store(0, Ordering::SeqCst);
         let wait_queue = Arc::clone(&queues.1);
         let thread = SchedulerThread::spawn(receiver, monitor, queues);
         sender.send(SchedCmd::Start).unwrap();
@@ -238,7 +239,12 @@ impl SchedulerThread {
         // Believe it or not, this remove is a huge performance hit to
         // the scheduler. It results a whole bunch of drops being run.
         if let Some(machine) = self.machines.get(key) {
-            log::trace!("removed machine {} key={}", machine.get_id(), machine.get_key());
+            log::info!(
+                "removed machine {} key={} task={}",
+                machine.get_id(),
+                machine.get_key(),
+                machine.get_task_id()
+            );
         } else {
             log::warn!("machine key {} not in collective", key);
             stats.remove_time += t.elapsed();
@@ -256,6 +262,7 @@ impl SchedulerThread {
             }
         }
     }
+
     fn run_task(&self, machine: &ShareableMachine) {
         if let Err(state) = machine.compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready) {
             if state != MachineState::Ready {

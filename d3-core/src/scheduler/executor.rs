@@ -185,7 +185,7 @@ impl ThreadData {
                 // and after all that, we've got nothing left to do. Let's catch some zzzz's
                 if blocked_sender_count == 0 && !ran_task {
                     if backoff.is_completed() {
-                        log::debug!("executor {} is sleeping", self.id);
+                        log::trace!("executor {} is sleeping", self.id);
                         let start = std::time::Instant::now();
                         let park_duration = stats_event.remaining();
                         // sanity bailout
@@ -196,7 +196,7 @@ impl ThreadData {
                             stats.sleep_count += 1;
                             stats.sleep_time += start.elapsed();
                         }
-                        log::debug!("executor {} is awake", self.id);
+                        log::trace!("executor {} is awake", self.id);
                     } else {
                         backoff.snooze();
                     }
