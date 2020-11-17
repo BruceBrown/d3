@@ -33,13 +33,15 @@ pub struct ForwarderMutable {
     // Chaos monkey random
     #[default(Uniform::from(0..1))]
     range: Uniform<usize>,
-    rng: rand::rngs::OsRng,
     // for TestData, this is the next in sequence
     next_seq: usize,
 }
 impl ForwarderMutable {
     /// get an index suitable for obtaining a random sender from the senders vector
-    fn get_monkey_fwd(&mut self) -> usize { self.range.sample(&mut self.rng) }
+    fn get_monkey_fwd(&mut self) -> usize {
+        let mut rng = rand::rngs::ThreadRng::default();
+        self.range.sample(&mut rng)
+    }
     fn drop_all_senders(&mut self) {
         self.senders.clear();
         self.notify_sender = None;
@@ -75,10 +77,12 @@ impl Machine<TestMessage> for Forwarder {
             },
             TestMessage::AddSender(sender) => {
                 mutable.senders.push(sender);
+                mutable.range = Uniform::from(0 .. mutable.senders.len());
                 return;
             },
-            TestMessage::AddSenders(mut senders) => {
-                senders.drain(..).for_each(|s| mutable.senders.push(s));
+            TestMessage::AddSenders(senders) => {
+                mutable.senders = senders;
+                mutable.range = Uniform::from(0 .. mutable.senders.len());
                 return;
             },
             TestMessage::ForwardingMultiplier(count) => {

@@ -9,10 +9,10 @@ use super::*;
 /// In this case, a pulse of 400 messages.
 #[derive(Debug, SmartDefault)]
 pub struct DaisyChainDriver {
-    #[default = 2000]
+    #[default = 4000]
     pub machine_count: usize,
 
-    #[default = 100]
+    #[default = 200]
     pub message_count: usize,
 
     #[default = true]

@@ -9,10 +9,10 @@ use super::*;
 /// executor as it may need to park senders due to a full message queue.
 #[derive(Debug, SmartDefault)]
 pub struct FanoutFaninDriver {
-    #[default = 500]
+    #[default = 1000]
     pub machine_count: usize,
 
-    #[default = 15]
+    #[default = 20]
     pub message_count: usize,
 
     #[default = true]
@@ -21,7 +21,7 @@ pub struct FanoutFaninDriver {
     #[default(Duration::from_secs(30))]
     pub duration: Duration,
 
-    #[default(Vec::with_capacity(510))]
+    #[default(Vec::with_capacity(1010))]
     pub senders: Vec<TestMessageSender>,
 
     pub fanout_sender: Option<TestMessageSender>,

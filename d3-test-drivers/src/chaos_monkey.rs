@@ -21,13 +21,13 @@ use super::*;
 /// varies the number of messages a machine may receive.
 #[derive(Debug, SmartDefault)]
 pub struct ChaosMonkeyDriver {
-    #[default = 2000]
+    #[default = 3000]
     pub machine_count: usize,
 
-    #[default = 100]
+    #[default = 200]
     pub message_count: usize,
 
-    #[default = 29]
+    #[default = 99]
     pub inflection_value: u32,
 
     #[default = true]
@@ -36,7 +36,7 @@ pub struct ChaosMonkeyDriver {
     #[default(Duration::from_secs(10))]
     pub duration: Duration,
 
-    #[default(Vec::with_capacity(2010))]
+    #[default(Vec::with_capacity(3010))]
     pub senders: Vec<TestMessageSender>,
     pub receiver: Option<TestMessageReceiver>,
     pub baseline: usize,
