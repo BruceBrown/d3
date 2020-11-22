@@ -101,3 +101,6 @@ pub mod components {
         pub use d3_components::settings::{self, *};
     }
 }
+pub mod conference {
+    pub use conference;
+}
