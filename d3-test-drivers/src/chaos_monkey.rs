@@ -38,6 +38,7 @@ pub struct ChaosMonkeyDriver {
 
     #[default(Vec::with_capacity(3010))]
     pub senders: Vec<TestMessageSender>,
+
     pub receiver: Option<TestMessageReceiver>,
     pub baseline: usize,
 }

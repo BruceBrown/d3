@@ -17,7 +17,7 @@ pub struct Sender<T: MachineImpl> {
     clone_count: Arc<AtomicUsize>,
     connection: ThreadSafeConnection,
     pub sender: crossbeam::channel::Sender<T>,
-    receiver_machine: WeakShareableMachine,
+    receiver_machine: ShareableMachine,
 }
 
 impl<T> Sender<T>
@@ -25,7 +25,7 @@ where
     T: MachineImpl,
 {
     pub fn get_id(&self) -> usize { self.channel_id }
-    pub fn bind(&mut self, recevier_machine: WeakShareableMachine) { self.receiver_machine = recevier_machine; }
+    pub fn bind(&mut self, recevier_machine: ShareableMachine) { self.receiver_machine = recevier_machine; }
     pub fn try_send(&self, msg: T) -> Result<(), TrySendError<T>> { self.sender.try_send(msg) }
 
     pub fn sender(&self) -> crossbeam::channel::Sender<T> { self.sender.clone() }
@@ -44,45 +44,38 @@ where
         // and schedule the receiver if needed
         match self.sender.try_send(msg) {
             Ok(()) => {
-                if let Some(machine) = self.receiver_machine.upgrade() {
-                    // log::debug!(
-                    // "chan {} send machine {} state {:#?} q_len {}",
-                    // self.channel_id,
-                    // machine.get_key(),
-                    // machine.get_state(),
-                    // self.sender.len()
-                    // );
-                    match machine.compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready) {
-                        Ok(_) => ExecutorData::schedule(&machine, false),
-                        // new machines will be scheduled when assigned, scheduling here would be bad
-                        Err(MachineState::New) => (),
-                        // already running is perfection
-                        Err(MachineState::Running) => (),
-                        // ready should already be scheduled
-                        Err(MachineState::Ready) => (),
-                        // send block will clear and schedule
-                        Err(MachineState::SendBlock) => (),
-                        // anything else we need to decide what to do, so log it
-                        Err(state) => {
-                            log::error!("chan {} state {:#?} q_len {}", self.channel_id, state, self.sender.len());
-                        },
-                    }
+                match self
+                    .receiver_machine
+                    .compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready)
+                {
+                    Ok(_) => ExecutorData::schedule(Arc::clone(&self.receiver_machine)),
+                    // new machines will be scheduled when assigned, scheduling here would be bad
+                    Err(MachineState::New) => (),
+                    // already running is perfection
+                    Err(MachineState::Running) => (),
+                    // ready should already be scheduled
+                    Err(MachineState::Ready) => (),
+                    // send block will clear and schedule
+                    Err(MachineState::SendBlock) => (),
+                    // anything else we need to decide what to do, so log it
+                    Err(state) => {
+                        log::error!("chan {} state {:#?} q_len {}", self.channel_id, state, self.sender.len());
+                    },
                 }
                 Ok(())
             },
             Err(TrySendError::Full(instruction)) => {
-                if let Some(machine) = self.receiver_machine.upgrade() {
-                    log::trace!(
-                        "parking sender {} with cmd {:#?} machine {} state {:#?}",
-                        self.channel_id,
-                        instruction,
-                        machine.get_key(),
-                        machine.get_state()
-                    );
-                }
+                log::trace!(
+                    "parking sender {} with cmd {:#?} machine {} state {:#?}",
+                    self.channel_id,
+                    instruction,
+                    self.receiver_machine.get_key(),
+                    self.receiver_machine.get_state()
+                );
+
                 match <T as MachineImpl>::park_sender(
                     self.channel_id,
-                    Weak::clone(&self.receiver_machine),
+                    Arc::clone(&self.receiver_machine),
                     self.sender.clone() as crossbeam::channel::Sender<<T as MachineImpl>::InstructionSet>,
                     instruction,
                 ) {
@@ -128,18 +121,20 @@ where
         if 0 != self.clone_count.fetch_sub(1, Ordering::SeqCst) {
             return;
         }
-        if let Some(machine) = self.receiver_machine.upgrade() {
-            machine.set_disconnected();
-            match machine.compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready) {
-                Ok(_) => {
-                    ExecutorData::schedule(&machine, true);
-                },
-                Err(MachineState::New) => (),
-                Err(MachineState::Ready) => (),
-                Err(MachineState::Running) => (),
-                Err(MachineState::Dead) => (),
-                Err(state) => panic!("sender drop not expecting receiver state {:#?}", state),
-            }
+
+        self.receiver_machine.set_disconnected();
+        match self
+            .receiver_machine
+            .compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready)
+        {
+            Ok(_) => {
+                ExecutorData::schedule(Arc::clone(&self.receiver_machine));
+            },
+            Err(MachineState::New) => (),
+            Err(MachineState::Ready) => (),
+            Err(MachineState::Running) => (),
+            Err(MachineState::Dead) => (),
+            Err(state) => panic!("sender drop not expecting receiver state {:#?}", state),
         }
     }
 }
@@ -155,7 +150,7 @@ where
             clone_count: Arc::clone(&self.clone_count),
             connection: Arc::clone(&self.connection),
             sender: self.sender.clone(),
-            receiver_machine: Weak::clone(&self.receiver_machine),
+            receiver_machine: Arc::clone(&self.receiver_machine),
         }
     }
 }
@@ -179,6 +174,6 @@ where
         clone_count: Arc::new(AtomicUsize::new(0)),
         connection,
         sender,
-        receiver_machine: Weak::new(),
+        receiver_machine: Arc::new(MachineAdapter::default()),
     }
 }

@@ -1,5 +1,25 @@
 # d3 -- Revision ChangeLog
 
+## Performance
+
+* Changed benchmarks to run longer. They were executing in a few milliseconds, which made them difficult to compare.
+* Re-worked how tasks are managed, removing the Task that wrapped a machine.
+* Re-worked the executor.
+* Evaluating closure call vs trait object call for machine methods. Closure looks like a winner.
+* Removed Mutex from a most Arc<Mutex<T>>, in favor of Arc<Atomic>.
+* Replaced Weak usage with Arc, avoiding the upgrade and downgrade overhead on parked senders.
+
+## 12-Nov-2020 Release 0.1.3 to crates.io
+
+* Release d3, d3-derive, d3-core, d3-components. Recommend using d3, which re-exports the others.
+
+| Crate         | Version | Description |
+|--------------:|--------:|:------------|
+| d3 | v0.1.3 | Combined crate, re-exporting d3-derive, d3-core, d3-components |
+| d3-derive | v0.1.3 | MachineImpl derive macro |
+| d3-core | v0.1.3 | Core layer, includes scheduler and executor |
+| d3-components | v0.1.3 | Component layer, includes Network, Settings Coordinator, Component and Connetor |
+
 ## SuperSlab and Conway's Game of Life
 
 * Move version to v0.1.3 for all crates.
@@ -13,7 +33,7 @@
 * Finally, got around to adding UDP support to the network.
 * Added new example of udp echo service.
 
-## 29-Oct-202 Release to crates.io
+## 29-Oct-2020 Release to crates.io
 
 | Crate         | Version | Description |
 |--------------:|--------:|:------------|

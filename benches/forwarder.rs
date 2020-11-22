@@ -37,6 +37,14 @@ pub fn bench(c: &mut Criterion) {
     group.bench_function("create_destroy_2000_machines", |b| b.iter(create_destroy_2000_machines));
     log::info!("create_destroy_2000_machines: tear-down complete");
 
+    let mut send_cmd = DaisyChainDriver::default();
+    send_cmd.machine_count = 1;
+    send_cmd.message_count = 200;
+    send_cmd.duration = Duration::from_secs(30);
+    send_cmd.setup();
+    group.bench_function("send 200 cmds", |b| b.iter(|| send_cmd.run()));
+    DaisyChainDriver::teardown(send_cmd);
+
     let mut fanout_fanin = FanoutFaninDriver::default();
     fanout_fanin.setup();
     group.bench_function("fanout_fanin_bound", |b| b.iter(|| fanout_fanin.run()));
@@ -51,14 +59,14 @@ pub fn bench(c: &mut Criterion) {
     let mut daisy_chain = DaisyChainDriver::default();
     daisy_chain.duration = Duration::from_secs(30);
     daisy_chain.setup();
-    group.bench_function("daisy_chain_bound", |b| b.iter(|| daisy_chain.run()));
+    group.bench_function("daisy_chain_bound 200 cmds 4000 machines", |b| b.iter(|| daisy_chain.run()));
     DaisyChainDriver::teardown(daisy_chain);
 
     let mut daisy_chain = DaisyChainDriver::default();
     daisy_chain.bound_queue = false;
     daisy_chain.duration = Duration::from_secs(30);
     daisy_chain.setup();
-    group.bench_function("daisy_chain_unbound", |b| b.iter(|| daisy_chain.run()));
+    group.bench_function("daisy_chain_unbound 200 cmds 4000 machines", |b| b.iter(|| daisy_chain.run()));
     DaisyChainDriver::teardown(daisy_chain);
 
     let mut chaos_monkey = ChaosMonkeyDriver::default();
@@ -90,6 +98,7 @@ fn setup() {
     executor::set_default_channel_capacity(500);
     executor::start_server();
     thread::sleep(Duration::from_millis(50));
+    println!("running with {} executor threads", d3::core::executor::get_executor_count());
 }
 
 fn teardown() {

@@ -193,7 +193,7 @@ mod tests {
         // stop the executor
         fn stop(&self) {}
         // get the queue
-        fn get_run_queue(&self) -> TaskInjector { panic!("get_run_queue should not be called.") }
+        fn get_run_queue(&self) -> ExecutorInjector { panic!("get_run_queue should not be called.") }
         // request stats from the executors
         fn request_stats(&self) {}
     }

@@ -27,6 +27,7 @@ pub struct FanoutFaninDriver {
     pub fanout_sender: Option<TestMessageSender>,
     pub receiver: Option<TestMessageReceiver>,
     pub baseline: usize,
+
     #[default(AtomicUsize::new(1))]
     pub iteration: AtomicUsize,
 }

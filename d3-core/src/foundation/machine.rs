@@ -36,7 +36,7 @@ pub trait MachineImpl: 'static + Send + Sync {
     // Park a sender. If the sender can't be parked, the instruction
     // is returned.
     fn park_sender(
-        channel_id: usize, receiver_machine: Weak<self::tls::collective::MachineAdapter>,
+        channel_id: usize, receiver_machine: Arc<self::tls::collective::MachineAdapter>,
         sender: crossbeam::channel::Sender<Self::InstructionSet>, instruction: Self::InstructionSet,
     ) -> Result<(), Self::InstructionSet>;
 }

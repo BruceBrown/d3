@@ -6,7 +6,7 @@
 #[macro_use]
 extern crate log;
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
 use std::thread;
 use std::time::{Duration, Instant};
 

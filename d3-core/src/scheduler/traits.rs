@@ -1,8 +1,9 @@
-use self::sched::SchedStats;
+use self::sched::{DefaultScheduler, SchedStats};
 use super::*;
 use crate::machine_impl::*;
 use crossbeam::deque;
 use d3_derive::*;
+use enum_dispatch::enum_dispatch;
 
 /// These are traits that are used for major components
 
@@ -63,14 +64,13 @@ pub trait ExecutorFactory {
     /// set the number of executor threads
     fn with_workers(&self, workers: usize);
     /// get the system queues: run_queue, wait_queue
-    fn get_queues(&self) -> (TaskInjector, SchedTaskInjector);
+    fn get_queues(&self) -> (ExecutorInjector, SchedTaskInjector);
     /// start the executor
     fn start(&self, monitor: MonitorSender, scheduler: SchedSender) -> ExecutorControlObj;
 }
 pub type ExecutorFactoryObj = Arc<dyn ExecutorFactory>;
 
 /// The model for a system queue
-pub type TaskInjector = Arc<deque::Injector<Task>>;
 pub type SchedTaskInjector = Arc<deque::Injector<SchedTask>>;
 
 pub trait ExecutorControl: Send + Sync {
@@ -81,7 +81,7 @@ pub trait ExecutorControl: Send + Sync {
     /// notifies the executor that an executor completed and can be joined
     fn joinable_executor(&self, id: usize);
     /// get run_queue
-    fn get_run_queue(&self) -> TaskInjector;
+    fn get_run_queue(&self) -> ExecutorInjector;
     /// stop the executor
     fn stop(&self);
     /// request stats from the executors
@@ -91,6 +91,7 @@ pub type ExecutorControlObj = Arc<dyn ExecutorControl>;
 
 /// The schdeuler and executor commands
 #[allow(dead_code)]
+#[derive(Debug)]
 pub enum SchedCmd {
     Start,
     Stop,
@@ -111,9 +112,10 @@ pub type SchedReceiver = crossbeam::channel::Receiver<SchedCmd>;
 pub trait SchedulerFactory {
     fn get_sender(&self) -> SchedSender;
     // start has to return a sized object trait, I prefer Arc over Box
-    fn start(&self, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Arc<dyn Scheduler>;
+    fn start(&self, monitor: MonitorSender, queues: (ExecutorInjector, SchedTaskInjector)) -> SchedulerEnum;
 }
 /// The scheduler trait
+#[enum_dispatch(SchedulerEnum)]
 pub trait Scheduler: Send + Sync {
     /// assigns a new machine, making it eligable for scheduling and running
     fn assign_machine(&self, machine: ShareableMachine);
@@ -123,4 +125,9 @@ pub trait Scheduler: Send + Sync {
     fn request_machine_info(&self);
     /// stop the scheduler
     fn stop(&self);
+}
+
+#[enum_dispatch]
+pub enum SchedulerEnum {
+    DefaultScheduler,
 }

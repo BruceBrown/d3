@@ -175,7 +175,7 @@ mod tests {
         let (alice, alice_sender) = executor::connect(Alice::default());
 
         // Let's prove that we have a default Alice.
-        assert_eq!(alice.lock().get_state(), AliceCmd::Init);
+        assert_eq!(alice.get_state(), AliceCmd::Init);
 
         // and that she's shared
         assert_eq!(Arc::strong_count(&alice), 2);
@@ -184,17 +184,17 @@ mod tests {
         // async, so let's give Alice some time to wake up.
         alice_sender.send(AliceCmd::Start).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(50));
-        assert_eq!(alice.lock().get_state(), AliceCmd::Start);
+        assert_eq!(alice.get_state(), AliceCmd::Start);
 
         // Let's send her a command to stop
         alice_sender.send(AliceCmd::Stop).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(50));
-        assert_eq!(alice.lock().get_state(), AliceCmd::Stop);
+        assert_eq!(alice.get_state(), AliceCmd::Stop);
 
         // Let's tell her to initialize
         alice_sender.send(AliceCmd::Init).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(50));
-        assert_eq!(alice.lock().get_state(), AliceCmd::Stop);
+        assert_eq!(alice.get_state(), AliceCmd::Stop);
 
         // drop her sender...and she should go away
         drop(alice_sender);

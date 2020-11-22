@@ -139,7 +139,7 @@ mod tests {
             }
         }
         // install a simple logger
-        CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).unwrap();
+        CombinedLogger::init(vec![TermLogger::new(LevelFilter::Info, Config::default(), TerminalMode::Mixed)]).unwrap();
         executor::start_server();
         thread::sleep(std::time::Duration::from_millis(20));
         let (m, component_sender) = executor::connect::<_, ComponentCmd>(Controller::default());
@@ -154,7 +154,7 @@ mod tests {
             .is_err()
         {}
         thread::sleep(std::time::Duration::from_millis(50));
-        assert_eq!(m.lock().counter.load(), 1);
+        assert_eq!(m.counter.load(), 1);
         executor::stop_server();
     }
 }

@@ -60,7 +60,7 @@ pub fn configure(settings: &Settings, _components: &[ComponentInfo]) -> Result<O
                 let (m, sender) = executor::connect::<_, NetCmd>(coordinator);
                 // bind the server address to the coordinator
                 get_network_sender()
-                    .send(NetCmd::BindUdpListener(m.lock().bind_addr.clone(), sender))
+                    .send(NetCmd::BindUdpListener(m.bind_addr.clone(), sender))
                     .expect("BindListener failed");
                 // add a ComponentCmd communication channel to the coordinator
                 let sender = executor::and_connect::<_, ComponentCmd>(&m);

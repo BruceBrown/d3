@@ -37,7 +37,7 @@ enum ServerState {
 enum ServerField {
     #[default]
     Uninitialized,
-    Scheduler(Arc<dyn Scheduler>),
+    Scheduler(SchedulerEnum),
     Executor(ExecutorControlObj),
     Monitor(MonitorControlObj),
 }
@@ -100,7 +100,7 @@ impl Server {
         }
     }
 
-    pub fn get_run_queue() -> Result<TaskInjector, ()> {
+    pub fn get_run_queue() -> Result<ExecutorInjector, ()> {
         let state = server_state.load();
         if state != ServerState::Running {
             log::error!("Server not running ({:#?}), unable to obtain run_q", state);
@@ -211,7 +211,7 @@ fn reset_core() {
     executor::RUN_QUEUE_LEN.store(0, Ordering::SeqCst);
     executor::EXECUTORS_SNOOZING.store(0, Ordering::SeqCst);
     sched::live_machine_count.store(0, Ordering::SeqCst);
-    tls::tls_executor::TASK_ID.store(1, Ordering::SeqCst);
+    tls::task::TASK_ID.store(1, Ordering::SeqCst);
 }
 
 #[doc(hidden)]
@@ -239,7 +239,7 @@ pub mod tests {
         T: FnOnce() + panic::UnwindSafe,
     {
         // install a simple logger
-        CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).unwrap();
+        if CombinedLogger::init(vec![TermLogger::new(LevelFilter::Error, Config::default(), TerminalMode::Mixed)]).is_err() {}
         setup();
 
         let result = panic::catch_unwind(|| test());
@@ -262,6 +262,29 @@ pub mod tests {
     fn test_stop() {
         run_test(|| {
             std::thread::sleep(std::time::Duration::from_millis(50));
+        });
+    }
+
+    #[test]
+    fn test_get_executor_count() {
+        run_test(|| {
+            log::error!("get_executor_count: cpu count = {}", get_executor_count());
+        });
+    }
+
+    #[test]
+    fn test_set_executor_count_2() {
+        set_executor_count(2);
+        run_test(|| {
+            assert_eq!(2, get_executor_count());
+        });
+    }
+
+    #[test]
+    fn test_set_executor_count_8() {
+        set_executor_count(8);
+        run_test(|| {
+            assert_eq!(8, get_executor_count());
         });
     }
 }

@@ -20,7 +20,7 @@ exclude = ["/ci/*", "/bors.toml"]
 # Cargo default release + lto = true
 [profile.release]
 opt-level = 3
-debug = false
+debug = true
 debug-assertions = false
 overflow-checks = false
 lto = true
@@ -29,13 +29,14 @@ incremental = false
 codegen-units = 16
 rpath = false
 
-# Cargo test, optimize with relaxed lto
+# Cargo test, this is the default
 [profile.test]
-opt-level = 3
+opt-level = 0
 debug = 2
 debug-assertions = true
 overflow-checks = true
-lto = 'thin'
+lto = false
+#panic = 'unwind'    # This setting is always ignored.
 incremental = true
 codegen-units = 256
 rpath = false
@@ -62,6 +63,7 @@ log = "0.4"
 simplelog = "0.8"
 rand = "0.7"
 parking_lot = "0.11"
+enum_dispatch = "0.3"
 
 d3-core = {version = "0.1.3", path = "./d3-core"}
 d3-derive = {version = "0.1.3", path = "./d3-derive"}

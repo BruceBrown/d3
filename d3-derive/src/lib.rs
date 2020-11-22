@@ -59,7 +59,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             type InstructionSet = #name;
             fn park_sender(
                 channel_id: usize,
-                receiver_machine: std::sync::Weak<MachineAdapter>,
+                receiver_machine: std::sync::Arc<MachineAdapter>,
                 sender: crossbeam::channel::Sender<Self::InstructionSet>,
                 instruction: Self::InstructionSet) -> Result<(),Self::InstructionSet> {
                 //Err(instruction)
@@ -68,15 +68,14 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                     // if its the main thread, let it block.
                     if tls.id == 0 { Err(instruction) }
                     else {
-                        if let ExecutorDataField::Machine(machine) = &tls.machine {
-                           let adapter = #sender_adapter_ident {
-                                receiver_machine,
-                                sender: sender,
-                                instruction: Some(instruction),
-                            };
-                            let shared_adapter = MachineSenderAdapter::new(machine, Box::new(adapter));
-                            tls.sender_blocked(channel_id, shared_adapter);
-                        }
+                        let machine = &tls.machine;
+                        let adapter = #sender_adapter_ident {
+                            receiver_machine,
+                            sender: sender,
+                            instruction: Some(instruction),
+                        };
+                        let shared_adapter = MachineSenderAdapter::new(machine, Box::new(adapter));
+                        tls.sender_blocked(channel_id, shared_adapter);
                         Ok(())
                     }
                 })
@@ -95,52 +94,44 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             machine: std::sync::Arc<dyn Machine<#name>>,
             receiver: Receiver<#name>,
         }
-        impl std::fmt::Debug for #adapter_ident {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                write!(f, "#adapter_ident {{ .. }}")
-            }
-        }
-        // This is the generic adapter implementation for the adapter, much of this is
-        // already generic, so maybe there's an alternative where the dyn stuff can
-        // be used less often.
-        //
-        impl MachineDependentAdapter for #adapter_ident {
-            fn receive_cmd(&self, machine: &ShareableMachine, once: bool, drop: bool, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
-                stats.tasks_executed += 1;
-                if machine.is_disconnected() {
-                    if let Err(state) = machine.compare_and_exchange_state(MachineState::Ready, MachineState::Running) {
-                        log::error!("exec: disconnected: expected state = Ready, machine {} found {:#?}", machine.get_key(), state);
-                        machine.set_state(MachineState::Running);
-                    }
-                    if once {
-                        self.machine.connected(machine.get_id());
-                        stats.instructs_sent += 1;
-                    }
-                    self.machine.disconnected();
-                    stats.instructs_sent += 1;
-                    if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::Dead) {
-                        log::error!("exec: disconnected: expected state = Running, machine {} found {:#?}", machine.get_key(), state);
-                        machine.set_state(MachineState::Dead);
-                    }
-                    return
-                }
+        impl #adapter_ident {
+            #[inline]
+            fn ready_to_running(machine: &ShareableMachine) {
                 if let Err(state) = machine.compare_and_exchange_state(MachineState::Ready, MachineState::Running) {
-                    log::error!("exec: expected state = Ready, machine {} found {:#?}", machine.get_key(), state);
+                    log::error!("exec: disconnected: expected state = Ready, machine {} found {:#?}", machine.get_key(), state);
                     machine.set_state(MachineState::Running);
                 }
-                // while we're running, might as well try to drain the queue, but keep it bounded
-                let start = std::time::Instant::now();
+            }
+            #[inline]
+            fn handle_once(&self, machine: &ShareableMachine, once: bool, stats: &mut ExecutorStats) {
                 if once {
                     self.machine.connected(machine.get_id());
                     stats.instructs_sent += 1;
                 }
-                //let mut cmd = self.take_instruction().unwrap();
+            }
+            #[inline]
+            fn handle_disconnect(&self, machine: &ShareableMachine, stats: &mut ExecutorStats) {
+                self.machine.disconnected();
+                stats.instructs_sent += 1;
+                if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::Dead) {
+                    log::error!("exec: disconnected: expected state = Running, machine {} found {:#?}", machine.get_key(), state);
+                    machine.set_state(MachineState::Dead);
+                }
+            }
+            fn recv_cmd(&self, machine: &ShareableMachine, once: bool, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
+                stats.tasks_executed += 1;
+
+                Self::ready_to_running(machine);
+                // while we're running, might as well try to drain the queue, but keep it bounded
+                let start = std::time::Instant::now();
+                self.handle_once(machine, once, stats);
                 let mut count = 0;
                 //log::trace!("enter chan {}, machine {} q_len {}", self.receiver.get_id(), machine.get_key(), self.receiver.receiver.len());
                 loop {
-                    if start.elapsed() > time_slice {
-                        stats.exhausted_slice += 1;
-                        break;
+                    // occasionally check for exhausting slice
+                    if count % 8 == 7 && start.elapsed() > time_slice {
+                       stats.exhausted_slice += 1;
+                       break;
                     }
                     let state = machine.get_state();
                     if state != MachineState::Running {
@@ -154,31 +145,62 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                             count += 1;
                         },
                         Err(crossbeam::channel::TryRecvError::Empty) => {
-                            if drop || machine.is_disconnected() {
+                            if machine.is_disconnected() {
                                 // treat as disconnected
-                                log::trace!("exec: machine {} disconnected, cleaning up", machine.get_key());
-                                self.machine.disconnected();
-                                stats.instructs_sent += 1;
-                                if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::Dead) {
-                                    log::error!("exec: (drop) expected state = Running, machine {} found {:#?}", machine.get_key(), state);
-                                    machine.set_state(MachineState::Dead);
-                                }
+                                self.handle_disconnect(machine, stats);
                             }
                             break;
                         },
                         Err(crossbeam::channel::TryRecvError::Disconnected) => {
                             log::trace!("exec: machine {} disconnected, cleaning up", machine.get_key());
-                            self.machine.disconnected();
-                            stats.instructs_sent += 1;
-                            if let Err(state) = machine.compare_and_exchange_state(MachineState::Running, MachineState::Dead) {
-                                log::error!("exec: (disconnected) expected state = Running, machine {} found {:#?}", machine.get_key(), state);
-                                machine.set_state(MachineState::Dead);
-                            }
+                            self.handle_disconnect(machine, stats);
                             break;
                         },
                     }
                 }
                 //log::trace!("exit chan {}, machine {} q_len {}, count {}", self.receiver.get_id(), machine.get_key(), self.receiver.receiver.len(), count);
+            }
+        }
+
+        impl std::fmt::Debug for #adapter_ident {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "#adapter_ident {{ .. }}")
+            }
+        }
+
+        impl MachineBuilder for #adapter_ident {
+            type InstructionSet = #name;
+            /// Consume a raw machine and receiver, using them to construct 3 closures:
+            /// is_channel_empty -- returns true if the receiver channel is empty
+            /// get_channel_len -- returns the count of commands in the receiver channel
+            /// recv_cmd -- receives commands and pushes them into the machine
+            ///
+            /// All of the closuers are injected into the adapter, as an alternative to
+            /// providing a trait object.
+            ///
+            fn build_adapter(machine: std::sync::Arc<dyn Machine<Self::InstructionSet>>, receiver: Receiver<Self::InstructionSet>) -> MachineAdapter
+            {
+                let r = receiver.receiver.clone();
+                let is_channel_empty = Box::new(move || -> bool { r.is_empty() });
+
+                let r = receiver.receiver.clone();
+                let get_channel_len = Box::new(move || -> usize { r.len() });
+
+                let adapter = Self { machine, receiver, };
+                let recv_cmd = Box::new(move |machine: &ShareableMachine, once: bool, time_slice: std::time::Duration, stats: &mut ExecutorStats| {
+                    adapter.recv_cmd(machine, once, time_slice, stats);
+                });
+                MachineAdapter::new(is_channel_empty, get_channel_len, recv_cmd)
+            }
+        }
+
+        // This is the generic adapter implementation for the adapter, much of this is
+        // already generic, so maybe there's an alternative where the dyn stuff can
+        // be used less often.
+        //
+        impl MachineDependentAdapter for #adapter_ident {
+            fn receive_cmd(&self, machine: &ShareableMachine, once: bool, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
+                self.recv_cmd(machine, once, time_slice, stats);
             }
             // determine if channel is empty
             fn is_channel_empty(&self) -> bool {
@@ -189,9 +211,10 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 self.receiver.receiver.len()
             }
         }
+
         #[doc(hidden)]
         pub struct #sender_adapter_ident {
-            receiver_machine: std::sync::Weak<MachineAdapter>,
+            receiver_machine: std::sync::Arc<MachineAdapter>,
             sender: crossbeam::channel::Sender<#name>,
             instruction: Option<#name>,
         }
@@ -199,13 +222,9 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             fn try_send(&mut self) -> Result<usize, TrySendError> {
                 let instruction = self.instruction.take().unwrap();
                 match self.sender.try_send(instruction) {
-                    Ok(()) => {
-                        if let Some(machine) = self.receiver_machine.upgrade() {
-                            Ok(machine.get_key())
-                        } else {
-                            Err(TrySendError::Disconnected)
-                        }
-                    },
+                    Ok(()) =>
+                           Ok(self.receiver_machine.get_key())
+                    ,
                     Err(crossbeam::channel::TrySendError::Disconnected(inst)) => {
                         self.instruction = Some(inst);
                         Err(TrySendError::Disconnected)
@@ -226,73 +245,6 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                     },
                     Err(e) => Err(e),
                 }
-            }
-        }
-
-        impl MachineBuilder for #adapter_ident {
-            type InstructionSet = #name;
-            /// Consume a raw machine, using it to create a machine that is usable by
-            /// the framework.
-            fn build_raw<T>(raw: T, channel_capacity: usize) -> (std::sync::Arc<parking_lot::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
-            where T: 'static + Machine<Self::InstructionSet>
-            {
-                // need to review allocation strategy for bounded
-                let (sender, receiver) = channel_with_capacity::<Self::InstructionSet>(channel_capacity);
-                Self::build_common(raw, sender, receiver)
-            }
-
-            fn build_addition<T>(machine: &std::sync::Arc<parking_lot::Mutex<T>>, channel_capacity: usize) -> (Sender<Self::InstructionSet>, MachineAdapter)
-            where T: 'static + Machine<Self::InstructionSet>
-            {
-                // need to review allocation strategy for bounded
-                let (sender, receiver) = channel_with_capacity::<Self::InstructionSet>(channel_capacity);
-                Self::build_addition_common(machine, sender, receiver)
-            }
-
-            fn build_unbounded<T>(raw: T) -> (std::sync::Arc<parking_lot::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter)
-            where T: 'static + Machine<Self::InstructionSet>
-            {
-                // need to review allocation strategy for bounded
-                let (sender, receiver) = channel::<Self::InstructionSet>();
-                Self::build_common(raw, sender, receiver)
-            }
-
-            fn build_addition_unbounded<T>(machine: &std::sync::Arc<parking_lot::Mutex<T>>) -> (Sender<Self::InstructionSet>, MachineAdapter)
-            where T: 'static + Machine<Self::InstructionSet>
-            {
-                // need to review allocation strategy for bounded
-                let (sender, receiver) = channel::<Self::InstructionSet>();
-                Self::build_addition_common(machine, sender, receiver)
-            }
-
-            fn build_common<T>(raw: T, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (std::sync::Arc<parking_lot::Mutex<T>>, Sender<Self::InstructionSet>, MachineAdapter )
-                where T: 'static + Machine<Self::InstructionSet>
-            {
-                 // wrap it
-                 let instance: std::sync::Arc<parking_lot::Mutex<T>> = std::sync::Arc::new(parking_lot::Mutex::new(raw));
-                 // clone it, making it look like a machine, Machine for Mutex<T> facilitates this
-                 let machine = std::sync::Arc::clone(&instance) as std::sync::Arc<dyn Machine<Self::InstructionSet>>;
-                 // wrap the machine dependent bits
-                 let adapter = Self {
-                     machine, receiver,
-                 };
-                 // wrap the independent and normalize the dependent with a trait object
-                 let machine_adapter = MachineAdapter::new(Box::new(adapter));
-                 (instance, sender, machine_adapter)
-            }
-
-            fn build_addition_common<T>(machine: &std::sync::Arc<parking_lot::Mutex<T>>, sender: Sender<Self::InstructionSet>, receiver: Receiver<Self::InstructionSet>) -> (Sender<Self::InstructionSet>, MachineAdapter )
-                where T: 'static + Machine<Self::InstructionSet>
-            {
-                 // clone it, making it look like a machine, Machine for Mutex<T> facilitates this
-                 let machine = std::sync::Arc::clone(machine) as std::sync::Arc<dyn Machine<Self::InstructionSet>>;
-                 // wrap the machine dependent bits
-                 let adapter = Self {
-                     machine, receiver,
-                 };
-                 // wrap the independent and normalize the dependent with a trait object
-                 let machine_adapter = MachineAdapter::new(Box::new(adapter));
-                 (sender, machine_adapter)
             }
         }
     };

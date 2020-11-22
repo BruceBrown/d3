@@ -4,8 +4,11 @@
 # works well enough.
 #
 dev_mode = true
-log_level = "Debug"
-test_server_duration = 20
+log_level = "Info"
+
+# if you want the server to run services, set test_server_duration to the number
+# of minutes you'd like it to run
+test_server_duration = 0
 
 #
 # Enable Forwarder feature to run daisy_chain nad fanout_fanin tests.
@@ -20,7 +23,7 @@ time_slice = 20
 [[additional]]
 [additional.Forwarder]
 run = [
-#    "daisy_chain",
+    "daisy_chain",
 #    "fanout_fanin",
 #    "chaos_monkey",
 ]
@@ -34,10 +37,10 @@ forwarding_multiplier = 1
 
 [additional.Forwarder.daisy_chain]
 timeout = 10
-machines = 2000
-messages = 100
+machines = 4000
+messages = 200
 forwarding_multiplier = 1
-iterations = 6000
+iterations = 100
 unbound_queue = 1
 
 [additional.Forwarder.fanout_fanin]
@@ -61,5 +64,5 @@ timeout = 1200
 machines = 4500
 messages = 200
 inflection_value = 99
-iterations = 6000
+iterations = 600
 unbound_queue = 0

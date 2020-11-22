@@ -84,7 +84,9 @@ impl DefaultScheduler {
         self.sender.send(SchedCmd::Stop).unwrap();
     }
     // create the scheduler
-    pub fn new(sender: SchedSender, receiver: SchedReceiver, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Self {
+    pub fn new(
+        sender: SchedSender, receiver: SchedReceiver, monitor: MonitorSender, queues: (ExecutorInjector, SchedTaskInjector),
+    ) -> Self {
         live_machine_count.store(0, Ordering::SeqCst);
         let wait_queue = Arc::clone(&queues.1);
         let thread = SchedulerThread::spawn(receiver, monitor, queues);
@@ -139,14 +141,16 @@ struct SchedulerThread {
     receiver: SchedReceiver,
     monitor: MonitorSender,
     wait_queue: SchedTaskInjector,
-    run_queue: TaskInjector,
+    run_queue: ExecutorInjector,
     is_running: bool,
     is_started: bool,
     machines: MachineMap,
 }
 impl SchedulerThread {
     // start the scheduler thread and call run()
-    fn spawn(receiver: SchedReceiver, monitor: MonitorSender, queues: (TaskInjector, SchedTaskInjector)) -> Option<thread::JoinHandle<()>> {
+    fn spawn(
+        receiver: SchedReceiver, monitor: MonitorSender, queues: (ExecutorInjector, SchedTaskInjector),
+    ) -> Option<thread::JoinHandle<()>> {
         log::info!("Starting scheduler");
         let thread = std::thread::spawn(move || {
             let mut sched_thread = Self {
@@ -230,7 +234,7 @@ impl SchedulerThread {
             log::error!("insert_machine: expected state New, found state {:#?}", state);
         }
         live_machine_count.fetch_add(1, Ordering::SeqCst);
-        schedule_machine(&machine, &self.run_queue);
+        schedule_machine(machine, &self.run_queue);
         stats.add_time += t.elapsed();
     }
 
@@ -239,7 +243,7 @@ impl SchedulerThread {
         // Believe it or not, this remove is a huge performance hit to
         // the scheduler. It results a whole bunch of drops being run.
         if let Some(machine) = self.machines.get(key) {
-            log::info!(
+            log::trace!(
                 "removed machine {} key={} task={}",
                 machine.get_id(),
                 machine.get_key(),
@@ -263,7 +267,7 @@ impl SchedulerThread {
         }
     }
 
-    fn run_task(&self, machine: &ShareableMachine) {
+    fn run_task(&self, machine: ShareableMachine) {
         if let Err(state) = machine.compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready) {
             if state != MachineState::Ready {
                 log::error!("sched run_task expected RecvBlock or Ready state{:#?}", state);
@@ -285,7 +289,7 @@ impl SchedulerThread {
                 .compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready)
                 .is_ok()
         {
-            schedule_machine(machine, &self.run_queue);
+            schedule_machine(Arc::clone(machine), &self.run_queue);
         }
     }
 
@@ -296,7 +300,7 @@ impl SchedulerThread {
             .compare_and_exchange_state(MachineState::RecvBlock, MachineState::Ready)
             .is_ok()
         {
-            schedule_machine(machine, &self.run_queue);
+            schedule_machine(Arc::clone(machine), &self.run_queue);
         }
     }
 }
@@ -312,11 +316,7 @@ mod tests {
     use d3_derive::*;
     use std::time::Duration;
 
-    use self::channel::{
-        machine_channel::{channel, channel_with_capacity},
-        receiver::Receiver,
-        sender::Sender,
-    };
+    use self::channel::{receiver::Receiver, sender::Sender};
 
     #[test]
     fn can_terminate() {
@@ -346,7 +346,7 @@ mod tests {
     pub fn build_machine<T, P>(
         machine: T,
     ) -> (
-        Arc<Mutex<T>>,
+        Arc<T>,
         Sender<<<P as MachineImpl>::Adapter as MachineBuilder>::InstructionSet>,
         MachineAdapter,
     )
@@ -366,7 +366,7 @@ mod tests {
     fn test_scheduler() {
         let (monitor_sender, _monitor_receiver) = crossbeam::channel::unbounded::<MonitorMessage>();
         let (sched_sender, sched_receiver) = crossbeam::channel::unbounded::<SchedCmd>();
-        let run_queue = Arc::new(deque::Injector::<Task>::new());
+        let run_queue = new_executor_injector();
         let wait_queue = Arc::new(deque::Injector::<SchedTask>::new());
 
         let thread = SchedulerThread::spawn(sched_receiver, monitor_sender, (run_queue, wait_queue));
@@ -374,13 +374,13 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(10));
 
         let mut senders: Vec<Sender<TestMessage>> = Vec::new();
-        let mut machines: Vec<Arc<Mutex<Alice>>> = Vec::new();
+        let mut machines: Vec<Arc<Alice>> = Vec::new();
         // build 5 alice machines
         for _ in 1 ..= 5 {
             let alice = Alice {};
             let (alice, mut sender, adapter) = build_machine(alice);
             let adapter = Arc::new(adapter);
-            sender.bind(Arc::downgrade(&adapter));
+            sender.bind(Arc::clone(&adapter));
             senders.push(sender);
             machines.push(alice);
             sched_sender.send(SchedCmd::New(adapter)).unwrap();

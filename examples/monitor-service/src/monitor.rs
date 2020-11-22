@@ -27,9 +27,9 @@ pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Op
                 }
                 log::debug!("monitor service selected configuration: {:#?}", value);
                 let (m, sender) = executor::connect::<_, NetCmd>(coordinator);
-                m.lock().mutable.lock().set_sender(sender.clone());
+                m.mutable.lock().set_sender(sender.clone());
                 get_network_sender()
-                    .send(NetCmd::BindListener(m.lock().bind_addr.clone(), sender))
+                    .send(NetCmd::BindListener(m.bind_addr.clone(), sender))
                     .expect("BindListener failed");
                 let sender = executor::and_connect::<_, CoreStatsMessage>(&m);
                 executor::stats::add_core_stats_sender(sender);

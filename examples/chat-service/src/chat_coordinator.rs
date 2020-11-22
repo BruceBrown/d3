@@ -92,7 +92,7 @@ pub fn configure(settings: &Settings, components: &[ComponentInfo]) -> Result<Op
                 log::debug!("chat service selected configuration: {:#?}", v);
                 let (m, sender) = executor::connect::<_, NetCmd>(coordinator);
                 // save out network sender until we give it away during start
-                m.lock().mutable.lock().my_sender.replace(sender);
+                m.mutable.lock().my_sender.replace(sender);
                 let sender = executor::and_connect::<_, ComponentCmd>(&m);
                 return Ok(Some(sender));
             }
@@ -132,7 +132,7 @@ impl MutableCoordinatorData {
             // save the chat sender in the coordinator
             self.inst_chat_sender.replace(sender.clone());
             // save the chat sender in the instance
-            instance.lock().my_sender.lock().replace(sender);
+            instance.my_sender.lock().replace(sender);
             // create a net sender for the instance
             let sender = executor::and_connect::<_, NetCmd>(&instance);
             // save the sender in the instance

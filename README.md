@@ -13,7 +13,23 @@ https://docs.rs/d3)
 [![Rust 1.47+](https://img.shields.io/badge/rust-1.47+-color.svg)](
 https://www.rust-lang.org)
 
+### Recent Performance Improvements Achieve 10M Cmd/Sec
+|Machine Specs | |
+|---------:|-----------------|
+|MacOS | Calalina Version 10.15.7 |
+|Processor | 1.1Ghz Dual Core Intel Core i3 |
+|Memory | 16Gb 2722 Hz LPDDR4X |
+|bench test| Daisy-chain of 4000 machines, sending 200 commands (800K cmds) in 79.412ms as measured by Criterion |
 
+#### Similar results are shown in github workflow with Linux:
+|Machine Specs | |
+|---------:|-----------------|
+|Ubuntu | 20.04.1 LTS
+|Processor | 2-core CPU
+|Memory | 7 GB of RAM memory
+|bench test| Daisy-chain of 4000 machines, sending 200 commands  (800K cmds) in 81.994 as measured by Criterion.
+
+## D3
 This crate provides a framework for server development. It is especially
 well suited for those cases where the server employs a pipeline architecture.
 
@@ -21,6 +37,7 @@ There are two core concepts, the machine, and the instruction set. Combined
 with a channel sender and receiver, you have all of the parts necessary for
 building a server. Strictly speaking, the d3 framework can be used for non-server
 projects, anywhere where you have concurrent, cooperative object instances.
+
 
 ## The Instruction Set
 The Instruction Set starts with any kind of enum. It becomes an instruction set

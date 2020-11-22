@@ -1,0 +1,65 @@
+name: CI Preview
+#
+# This performs test and benchmarks against ubuntu 20.04
+#
+on:
+  push:
+    branches-ignore:
+      - master
+
+jobs:
+  ci:
+    runs-on: ubuntu-20.04
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        rust:
+          - nightly
+
+    steps:
+      - uses: actions/checkout@v2
+    
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v1
+
+      # install vcpkg and let it help with SDL2 dependencies -- see Cargo.toml
+      - name: Install vcpkg
+        run: |
+          cargo install cargo-vcpkg
+          cargo vcpkg build
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --workspace -- -W clippy::all -W clippy::nursery -D warnings
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --workspace --tests -- --test-threads 1
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: bench
+
+      - name: Archive bench logs
+        uses: actions/upload-artifact@v2
+        if: failure()
+        with:
+          name: bench-logs
+          path: benches.log

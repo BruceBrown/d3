@@ -130,15 +130,16 @@ mod foundation {
 mod tls {
     #![allow(dead_code)]
     use super::*;
-    use crate::foundation::{linear_backoff::LinearBackoff, thread_safe::*};
+    use crate::foundation::linear_backoff::LinearBackoff;
     pub mod collective;
+    pub mod task;
     pub mod tls_executor;
 }
 mod channel {
     #![allow(dead_code)]
     use super::*;
     use crate::foundation::machine::*;
-    use crate::tls::collective::{MachineState, WeakShareableMachine};
+    use crate::tls::collective::{MachineAdapter, MachineState, ShareableMachine};
     use crate::tls::tls_executor::ExecutorData;
     mod connection;
     pub mod machine_channel;
@@ -158,7 +159,7 @@ mod scheduler {
     use super::*;
     use crate::collective::machine::*;
     use crate::foundation::{linear_backoff::*, machine::*, simple_event_timer::*};
-    use crate::tls::{collective::*, tls_executor::*};
+    use crate::tls::{collective::*, task::*, tls_executor::*};
     pub mod executor;
     pub mod machine;
     mod overwatch;
@@ -182,7 +183,7 @@ pub mod machine_impl {
     pub use crate::tls::{
         collective::{MachineAdapter, MachineDependentAdapter, MachineState, ShareableMachine, SharedMachineState},
         tls_executor::{
-            tls_executor_data, ExecutorDataField, ExecutorStats, MachineDependentSenderAdapter, MachineSenderAdapter, Task, TrySendError,
+            tls_executor_data, ExecutorDataField, ExecutorStats, MachineDependentSenderAdapter, MachineSenderAdapter, TrySendError,
         },
     };
 }

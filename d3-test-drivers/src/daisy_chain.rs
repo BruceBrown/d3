@@ -31,6 +31,7 @@ pub struct DaisyChainDriver {
     pub receiver: Option<TestMessageReceiver>,
     pub baseline: usize,
     pub exepected_message_count: usize,
+
     #[default(AtomicUsize::new(1))]
     pub iteration: AtomicUsize,
 }

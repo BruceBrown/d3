@@ -96,7 +96,7 @@ mod tests {
             let start = std::time::Instant::now();
             loop {
                 thread::sleep(Duration::from_millis(10));
-                let count = t.lock().get_and_clear_received_count();
+                let count = t.get_and_clear_received_count();
                 if count == 1 {
                     break;
                 }
@@ -105,7 +105,7 @@ mod tests {
                 }
             }
             // we got the count of 1, now check that its cleared
-            assert_eq!(t.lock().get_and_clear_received_count(), 0);
+            assert_eq!(t.get_and_clear_received_count(), 0);
         });
     }
 
