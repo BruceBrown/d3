@@ -102,7 +102,7 @@ impl Alice {
     // create Alice
     fn new(conn_id: NetConnId, net_sender: NetSender) -> Self {
         Self {
-            uuid: AtomicCell::new(Uuid::default()),
+            uuid: AtomicCell::new(Uuid::new_v4()),
             net_sender,
             conn_id,
             state: AtomicCell::new(AliceState::default()),

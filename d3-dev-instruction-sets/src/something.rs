@@ -1,3 +1,5 @@
+// cov: begin-ignore-line
+
 use super::*;
 
 #[derive(Debug, MachineImpl)]
@@ -7,3 +9,5 @@ pub enum Something {
     Two,
     Three,
 }
+
+// cov: end-ignore-line

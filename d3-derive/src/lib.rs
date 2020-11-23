@@ -53,6 +53,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
     let sender_adapter_ident = format_ident!("SenderAdapter{}", name.to_string());
     // let recv_wait_ident = format_ident!("RecvWait{}", name.to_string());
     let expanded = quote! {
+        // cov: begin-ignore-line
         impl MachineImpl for #name {
             type Adapter = #adapter_ident;
             type SenderAdapter = #sender_adapter_ident;
@@ -81,6 +82,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 })
             }
         }
+        // cov: end-ignore-line
 
         // This is the instruction set dependent machine, we've forgone generic <T>
         // as it becomes unwieldy when it comes to scheduling and execution. For the
@@ -94,6 +96,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             machine: std::sync::Arc<dyn Machine<#name>>,
             receiver: Receiver<#name>,
         }
+        // cov: begin-ignore-line
         impl #adapter_ident {
             #[inline]
             fn ready_to_running(machine: &ShareableMachine) {
@@ -161,13 +164,17 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 //log::trace!("exit chan {}, machine {} q_len {}, count {}", self.receiver.get_id(), machine.get_key(), self.receiver.receiver.len(), count);
             }
         }
+        // cov: end-ignore-line
 
+        // cov: begin-ignore-line
         impl std::fmt::Debug for #adapter_ident {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 write!(f, "#adapter_ident {{ .. }}")
             }
         }
+        // cov: end-ignore-line
 
+        // cov: begin-ignore-line
         impl MachineBuilder for #adapter_ident {
             type InstructionSet = #name;
             /// Consume a raw machine and receiver, using them to construct 3 closures:
@@ -193,11 +200,14 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 MachineAdapter::new(is_channel_empty, get_channel_len, recv_cmd)
             }
         }
+        // cov: end-ignore-line
 
         // This is the generic adapter implementation for the adapter, much of this is
         // already generic, so maybe there's an alternative where the dyn stuff can
         // be used less often.
         //
+
+        // cov: begin-ignore-line
         impl MachineDependentAdapter for #adapter_ident {
             fn receive_cmd(&self, machine: &ShareableMachine, once: bool, time_slice: std::time::Duration, stats: &mut ExecutorStats) {
                 self.recv_cmd(machine, once, time_slice, stats);
@@ -211,6 +221,7 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 self.receiver.receiver.len()
             }
         }
+        // cov: end-ignore-line
 
         #[doc(hidden)]
         pub struct #sender_adapter_ident {
@@ -218,6 +229,8 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
             sender: crossbeam::channel::Sender<#name>,
             instruction: Option<#name>,
         }
+
+        // cov: begin-ignore-line
         impl #sender_adapter_ident {
             fn try_send(&mut self) -> Result<usize, TrySendError> {
                 let instruction = self.instruction.take().unwrap();
@@ -236,7 +249,9 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 }
             }
         }
+        // cov: end-ignore-line
 
+        // cov: begin-ignore-line
         impl MachineDependentSenderAdapter for #sender_adapter_ident {
             fn try_send(&mut self) -> Result<usize, TrySendError> {
                 match self.try_send() {
@@ -247,6 +262,8 @@ pub fn derive_machine_impl_fn(input: TokenStream) -> TokenStream {
                 }
             }
         }
+        // cov: end-ignore-line
+
     };
     TokenStream::from(expanded)
 }

@@ -24,19 +24,34 @@ jobs:
           profile: minimal
           toolchain: ${{ matrix.rust }}
           override: true
-          components: rustfmt, clippy
+          components: rustfmt, clippy, 
 
       - uses: Swatinem/rust-cache@v1
 
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install grcov
+
       # install vcpkg and let it help with SDL2 dependencies -- see Cargo.toml
-      - name: Install vcpkg
-        run: |
-          cargo install cargo-vcpkg
-          cargo vcpkg build
+      - uses: actions-rs/cargo@v1
+        with:
+          command: install cargo-vcpkg
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: vcpkg build
+        env:
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
 
       - uses: actions-rs/cargo@v1
         with:
           command: build
+        env:
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
+          RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=abort -Zpanic_abort_tests'
 
       - uses: actions-rs/cargo@v1
         with:
@@ -52,14 +67,19 @@ jobs:
         with:
           command: test
           args: --workspace --tests -- --test-threads 1
+        env:
+          CARGO_INCREMENTAL: '0'
+          RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=unlink -Zpanic_abort_tests'
+          RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=unlink -Zpanic_abort_tests'
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: bench
+      - name: Coverage
+          run: |
+            grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing --excl-start "cov: begin-ignore-line" --excl-stop "cov: end-ignore-line" --excl-line "log::[^)]*[)]|unreachable" --ignore "examples/**" --ignore "d3-dev*/**" --ignore "d3-test*/**" --ignore "target/**" --ignore "tests/**"  -o ./target/debug/coverage/
+            tar -cvjf coverage.tbz ./target/debug/coverage
 
-      - name: Archive bench logs
+      - name: Archive compressed coverage.tbz
         uses: actions/upload-artifact@v2
-        if: failure()
+        if: sucess()
         with:
-          name: bench-logs
-          path: benches.log
+          name: coverage-report
+          path: coverage.tbz

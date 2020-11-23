@@ -164,16 +164,18 @@ where
 
 impl<T> Eq for Sender<T> where T: MachineImpl {}
 
-impl<T> PartialOrd for Sender<T> where T: MachineImpl {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.channel_id.cmp(&other.channel_id))
-    }
+impl<T> PartialOrd for Sender<T>
+where
+    T: MachineImpl,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.channel_id.cmp(&other.channel_id)) }
 }
 
-impl<T> Ord for Sender<T> where T: MachineImpl {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.channel_id.cmp(&other.channel_id)
-    }
+impl<T> Ord for Sender<T>
+where
+    T: MachineImpl,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.channel_id.cmp(&other.channel_id) }
 }
 
 pub fn wrap_sender<T>(sender: crossbeam::channel::Sender<T>, channel_id: usize, connection: ThreadSafeConnection) -> Sender<T>

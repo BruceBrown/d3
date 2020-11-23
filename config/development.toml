@@ -37,10 +37,10 @@ forwarding_multiplier = 1
 
 [additional.Forwarder.daisy_chain]
 timeout = 10
-machines = 4000
-messages = 200
-forwarding_multiplier = 1
-iterations = 100
+machines = 8
+messages = 1
+forwarding_multiplier = 4
+iterations = 2
 unbound_queue = 1
 
 [additional.Forwarder.fanout_fanin]

@@ -1,5 +1,5 @@
 //#![feature(test)]
-//extern crate test;
+// extern crate test;
 
 #[macro_use] extern crate log;
 
@@ -210,7 +210,7 @@ mod tests {
             log::info!("multiplier running");
             assert_eq!(executor::get_machine_count(), 0);
             let mut daisy_chain = DaisyChainDriver::default();
-            daisy_chain.machine_count = 7;
+            daisy_chain.machine_count = 8;
             daisy_chain.message_count = 1;
             daisy_chain.forwarding_multiplier = 4;
             daisy_chain.duration = Duration::from_secs(15);

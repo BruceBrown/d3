@@ -31,6 +31,7 @@ impl MachineDependentAdapter for DefaultMachineDependentAdapter {
 #[doc(hidden)]
 #[derive(SmartDefault)]
 pub struct MachineAdapter {
+    #[default(Uuid::new_v4())]
     // The id is assigned on creation, and is intended for to be used in logging
     id: Uuid,
 
