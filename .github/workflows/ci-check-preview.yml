@@ -73,9 +73,10 @@ jobs:
           RUSTDOCFLAGS: '-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Cpanic=unlink -Zpanic_abort_tests'
 
       - name: Coverage
-          run: |
-            grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing --excl-start "cov: begin-ignore-line" --excl-stop "cov: end-ignore-line" --excl-line "log::[^)]*[)]|unreachable" --ignore "examples/**" --ignore "d3-dev*/**" --ignore "d3-test*/**" --ignore "target/**" --ignore "tests/**"  -o ./target/debug/coverage/
-            tar -cvjf coverage.tbz ./target/debug/coverage
+          run: grcov ./target/debug/ -s . -t html --llvm --branch --ignore-not-existing --excl-start "cov: begin-ignore-line" --excl-stop "cov: end-ignore-line" --excl-line "log::[^;]*;|unreachable" --ignore "examples/**" --ignore "d3-dev*/**" --ignore "d3-test*/**" --ignore "target/**" --ignore "tests/**"  -o ./target/debug/coverage/
+      
+      - name: Compress
+          run: tar -cvjf coverage.tbz ./target/debug/coverage
 
       - name: Archive compressed coverage.tbz
         uses: actions/upload-artifact@v2
