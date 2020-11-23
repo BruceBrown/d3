@@ -5,20 +5,6 @@ use super::*;
 // This is the TLS data for the executor. It is used by the channel and the executor;
 // Otherwise, this would be much higher in the stack.
 
-// A task for the scheduler, which will reschedule the machine
-pub struct SchedTask {
-    pub start: Instant,
-    pub machine_key: usize,
-}
-impl SchedTask {
-    pub fn new(machine_key: usize) -> Self {
-        Self {
-            start: Instant::now(),
-            machine_key,
-        }
-    }
-}
-
 /// The ExecutorStats expose metrics for each executor.
 #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
 pub struct ExecutorStats {

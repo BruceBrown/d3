@@ -74,7 +74,6 @@ pub struct SchedStats {
 #[allow(dead_code)]
 pub struct DefaultScheduler {
     sender: SchedSender,
-    wait_queue: SchedTaskInjector,
     thread: Option<thread::JoinHandle<()>>,
 }
 impl DefaultScheduler {
@@ -84,18 +83,11 @@ impl DefaultScheduler {
         self.sender.send(SchedCmd::Stop).unwrap();
     }
     // create the scheduler
-    pub fn new(
-        sender: SchedSender, receiver: SchedReceiver, monitor: MonitorSender, queues: (ExecutorInjector, SchedTaskInjector),
-    ) -> Self {
+    pub fn new(sender: SchedSender, receiver: SchedReceiver, monitor: MonitorSender, run_queue: ExecutorInjector) -> Self {
         live_machine_count.store(0, Ordering::SeqCst);
-        let wait_queue = Arc::clone(&queues.1);
-        let thread = SchedulerThread::spawn(receiver, monitor, queues);
+        let thread = SchedulerThread::spawn(receiver, monitor, run_queue);
         sender.send(SchedCmd::Start).unwrap();
-        Self {
-            wait_queue,
-            sender,
-            thread,
-        }
+        Self { sender, thread }
     }
 }
 
@@ -140,7 +132,6 @@ const MAX_SELECT_HANDLES: usize = usize::MAX - 16;
 struct SchedulerThread {
     receiver: SchedReceiver,
     monitor: MonitorSender,
-    wait_queue: SchedTaskInjector,
     run_queue: ExecutorInjector,
     is_running: bool,
     is_started: bool,
@@ -148,16 +139,13 @@ struct SchedulerThread {
 }
 impl SchedulerThread {
     // start the scheduler thread and call run()
-    fn spawn(
-        receiver: SchedReceiver, monitor: MonitorSender, queues: (ExecutorInjector, SchedTaskInjector),
-    ) -> Option<thread::JoinHandle<()>> {
+    fn spawn(receiver: SchedReceiver, monitor: MonitorSender, run_queue: ExecutorInjector) -> Option<thread::JoinHandle<()>> {
         log::info!("Starting scheduler");
         let thread = std::thread::spawn(move || {
             let mut sched_thread = Self {
                 receiver,
                 monitor,
-                run_queue: queues.0,
-                wait_queue: queues.1,
+                run_queue,
                 is_running: true,
                 is_started: false,
                 machines: MachineMap::with_capacity(get_machine_count_estimate()),
@@ -324,7 +312,7 @@ mod tests {
         let executor_factory = SystemExecutorFactory::new();
         let scheduler_factory = create_sched_factory();
 
-        let scheduler = scheduler_factory.start(monitor_factory.get_sender(), executor_factory.get_queues());
+        let scheduler = scheduler_factory.start(monitor_factory.get_sender(), executor_factory.get_run_queue());
         thread::sleep(Duration::from_millis(100));
         log::info!("stopping scheduler via control");
         scheduler.stop();
@@ -367,9 +355,8 @@ mod tests {
         let (monitor_sender, _monitor_receiver) = crossbeam::channel::unbounded::<MonitorMessage>();
         let (sched_sender, sched_receiver) = crossbeam::channel::unbounded::<SchedCmd>();
         let run_queue = new_executor_injector();
-        let wait_queue = Arc::new(deque::Injector::<SchedTask>::new());
 
-        let thread = SchedulerThread::spawn(sched_receiver, monitor_sender, (run_queue, wait_queue));
+        let thread = SchedulerThread::spawn(sched_receiver, monitor_sender, run_queue);
         // at this point the scheduler should be running
         std::thread::sleep(std::time::Duration::from_millis(10));
 

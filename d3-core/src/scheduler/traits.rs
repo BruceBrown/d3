@@ -63,15 +63,12 @@ pub type MonitorControlObj = Arc<dyn MonitorControl>;
 pub trait ExecutorFactory {
     /// set the number of executor threads
     fn with_workers(&self, workers: usize);
-    /// get the system queues: run_queue, wait_queue
-    fn get_queues(&self) -> (ExecutorInjector, SchedTaskInjector);
+    /// get the system run_queue
+    fn get_run_queue(&self) -> ExecutorInjector;
     /// start the executor
     fn start(&self, monitor: MonitorSender, scheduler: SchedSender) -> ExecutorControlObj;
 }
 pub type ExecutorFactoryObj = Arc<dyn ExecutorFactory>;
-
-/// The model for a system queue
-pub type SchedTaskInjector = Arc<deque::Injector<SchedTask>>;
 
 pub trait ExecutorControl: Send + Sync {
     /// notifies the executor that an executor is parked
@@ -112,7 +109,7 @@ pub type SchedReceiver = crossbeam::channel::Receiver<SchedCmd>;
 pub trait SchedulerFactory {
     fn get_sender(&self) -> SchedSender;
     // start has to return a sized object trait, I prefer Arc over Box
-    fn start(&self, monitor: MonitorSender, queues: (ExecutorInjector, SchedTaskInjector)) -> SchedulerEnum;
+    fn start(&self, monitor: MonitorSender, run_queue: ExecutorInjector) -> SchedulerEnum;
 }
 /// The scheduler trait
 #[enum_dispatch(SchedulerEnum)]

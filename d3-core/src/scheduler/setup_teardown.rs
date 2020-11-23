@@ -165,7 +165,7 @@ pub fn start_server() {
 
     let executor = executor_factory.start(monitor_factory.get_sender(), scheduler_factory.get_sender());
     let monitor = monitor_factory.start(Arc::clone(&executor));
-    let scheduler = scheduler_factory.start(monitor_factory.get_sender(), executor_factory.get_queues());
+    let scheduler = scheduler_factory.start(monitor_factory.get_sender(), executor_factory.get_run_queue());
 
     let mut s = server.borrow_mut();
     s.monitor = ServerField::Monitor(monitor);

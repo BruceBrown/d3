@@ -22,10 +22,10 @@ impl Factory {
     /// get the sender for the scheduler
     pub fn get_sender(&self) -> SchedSender { self.sender.clone() }
     /// start the scheduler
-    pub fn create_and_start(&self, monitor: MonitorSender, queues: (ExecutorInjector, SchedTaskInjector)) -> SchedulerEnum {
+    pub fn create_and_start(&self, monitor: MonitorSender, run_queue: ExecutorInjector) -> SchedulerEnum {
         // this where different schedulers can be started
         log::info!("creating Scheduler");
-        let s: SchedulerEnum = DefaultScheduler::new(self.sender.clone(), self.receiver.clone(), monitor, queues).into();
+        let s: SchedulerEnum = DefaultScheduler::new(self.sender.clone(), self.receiver.clone(), monitor, run_queue).into();
         s
     }
 }
@@ -33,7 +33,5 @@ impl Factory {
 impl SchedulerFactory for Factory {
     fn get_sender(&self) -> SchedSender { self.sender.clone() }
     // start must return a sized object trait, I prefer Arc over Box
-    fn start(&self, monitor: MonitorSender, queues: (ExecutorInjector, SchedTaskInjector)) -> SchedulerEnum {
-        self.create_and_start(monitor, queues)
-    }
+    fn start(&self, monitor: MonitorSender, run_queue: ExecutorInjector) -> SchedulerEnum { self.create_and_start(monitor, run_queue) }
 }

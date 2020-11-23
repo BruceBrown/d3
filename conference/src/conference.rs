@@ -202,13 +202,13 @@ mod tests {
     use super::*;
     use d3_derive::*;
 
-        // cov: begin-ignore-line
-        #[allow(dead_code)]
-        #[derive(Debug, Copy, Clone, MachineImpl)]
-        pub enum Calc {
-            Clear,
-        }
-        // cov: end-ignore-line
+    // cov: begin-ignore-line
+    #[allow(dead_code)]
+    #[derive(Debug, Copy, Clone, MachineImpl)]
+    pub enum Calc {
+        Clear,
+    }
+    // cov: end-ignore-line
 
     #[test]
     fn test_leave() {
@@ -250,9 +250,8 @@ mod tests {
 
     #[test]
     fn test_conference_root_notifications() {
-
         start_conferences();
-        let factory = ConferenceFactory{};
+        let factory = ConferenceFactory {};
 
         let (alice_calc_sender, alice_calc_receiver) = channel::<Calc>();
         factory.register_observer(alice_calc_sender.clone());
@@ -264,13 +263,12 @@ mod tests {
             Err(_) => unreachable!(),
         }
         factory.unregister_observer(&alice_calc_sender);
-     
+
         stop_conferences();
     }
 
     #[test]
     fn test_conference_notifications() {
-
         start_conferences();
         let conf_1_uuid = Uuid::new_v4();
         let sess_1_uuid = Uuid::new_v4();
@@ -286,13 +284,12 @@ mod tests {
             Err(_) => unreachable!(),
         }
         conf_1.unregister_observer(&alice_calc_sender);
-     
+
         stop_conferences();
     }
 
     #[test]
     fn test_conference_session() {
-
         start_conferences();
         let conf_1_uuid = Uuid::new_v4();
         let sess_1_uuid = Uuid::new_v4();
@@ -308,10 +305,9 @@ mod tests {
             Err(_) => unreachable!(),
         }
         sess_1.unregister_observer(&alice_calc_sender);
-     
+
         stop_conferences();
     }
-
 }
 
 // cov: end-ignore-line

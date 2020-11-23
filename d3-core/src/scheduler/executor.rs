@@ -30,7 +30,6 @@ pub fn get_executors_snoozing() -> usize { EXECUTORS_SNOOZING.load(Ordering::Seq
 pub struct SystemExecutorFactory {
     workers: RefCell<usize>,
     run_queue: ExecutorInjector,
-    wait_queue: SchedTaskInjector,
 }
 impl SystemExecutorFactory {
     // expose the factory as a trait object.
@@ -39,7 +38,6 @@ impl SystemExecutorFactory {
         Arc::new(Self {
             workers: RefCell::new(4),
             run_queue: new_executor_injector(),
-            wait_queue: Arc::new(deque::Injector::<SchedTask>::new()),
         })
     }
 }
@@ -48,12 +46,12 @@ impl SystemExecutorFactory {
 impl ExecutorFactory for SystemExecutorFactory {
     // change the number of executors
     fn with_workers(&self, workers: usize) { self.workers.replace(workers); }
-    // get thread run_queue, wait_queue
-    fn get_queues(&self) -> (ExecutorInjector, SchedTaskInjector) { (Arc::clone(&self.run_queue), Arc::clone(&self.wait_queue)) }
+    // get thread run_queue
+    fn get_run_queue(&self) -> ExecutorInjector { Arc::clone(&self.run_queue) }
     // start the executor
     fn start(&self, monitor: MonitorSender, scheduler: SchedSender) -> ExecutorControlObj {
         let workers: usize = *self.workers.borrow();
-        let res = Executor::new(workers, monitor, scheduler, self.get_queues());
+        let res = Executor::new(workers, monitor, scheduler, self.get_run_queue());
         Arc::new(res)
     }
 }
@@ -62,7 +60,6 @@ impl ExecutorFactory for SystemExecutorFactory {
 struct Notifier {
     monitor: MonitorSender,
     scheduler: SchedSender,
-    wait_queue: SchedTaskInjector,
 }
 impl ExecutorNotifier for Notifier {
     fn notify_parked(&self, executor_id: usize) {
@@ -74,13 +71,11 @@ impl ExecutorNotifier for Notifier {
         if self.scheduler.send(SchedCmd::SendComplete(machine_key)).is_err() {
             log::warn!("failed to send to scheduler");
         }
-        // self.wait_queue.push(SchedTask::new(machine_key));
     }
     fn notify_can_schedule_receiver(&self, machine_key: usize) {
         if self.scheduler.send(SchedCmd::RecvBlock(machine_key)).is_err() {
             log::warn!("failed to send to scheduler");
         }
-        // self.wait_queue.push(SchedTask::new(machine_key));
     }
 }
 
@@ -98,7 +93,6 @@ struct ThreadData {
     scheduler: SchedSender,
     workers: Workers,
     run_queue: ExecutorInjector,
-    wait_queue: Arc<deque::Injector<SchedTask>>,
     work: ExecutorWorker,
     stealers: ExecutorStealers,
     shared_info: Arc<SharedExecutorInfo>,
@@ -238,7 +232,6 @@ impl ThreadData {
         let notifier = Notifier {
             monitor: self.monitor.clone(),
             scheduler: self.scheduler.clone(),
-            wait_queue: Arc::clone(&self.wait_queue),
         };
         tls_executor_data.with(|t| {
             let mut tls = t.borrow_mut();
@@ -462,18 +455,15 @@ impl Drop for BigExecutorStats {
     }
 }
 
-// There are two queues managed here, the run_queue, which contains runnable tasks
-// and the wait_queue, which contains waiting tasks. Executors pull from the run queue
-// and may push into the wait queue. Currently, the send a message to the scheduler,
-// essentially making the message queue a wait queue. Need to run some performance
-// tests to determine which is better.
+// There one queue managed here, the run_queue, which contains runnable tasks.
+// Executors pull from the run queue and may send to the scheduler channel,
+// essentially making the message queue a wait queue.
 struct Executor {
     worker_count: usize,
     monitor: MonitorSender,
     scheduler: SchedSender,
     next_worker_id: AtomicUsize,
     run_queue: ExecutorInjector,
-    wait_queue: SchedTaskInjector,
     workers: Workers,
     parked_workers: Workers,
     barrier: Mutex<()>,
@@ -482,15 +472,14 @@ struct Executor {
 
 impl Executor {
     // create the executors
-    fn new(worker_count: usize, monitor: MonitorSender, scheduler: SchedSender, queues: (ExecutorInjector, SchedTaskInjector)) -> Self {
+    fn new(worker_count: usize, monitor: MonitorSender, scheduler: SchedSender, run_queue: ExecutorInjector) -> Self {
         log::info!("Starting executor with {} executors", worker_count);
         let factory = Self {
             worker_count,
             monitor,
             scheduler,
             next_worker_id: AtomicUsize::new(1),
-            run_queue: queues.0,
-            wait_queue: queues.1,
+            run_queue,
             workers: Arc::new(RwLock::new(HashMap::with_capacity(worker_count))),
             parked_workers: Arc::new(RwLock::new(HashMap::with_capacity(worker_count))),
             barrier: Mutex::new(()),
@@ -609,7 +598,6 @@ impl Executor {
             monitor: self.monitor.clone(),
             scheduler: self.scheduler.clone(),
             run_queue: Arc::clone(&self.run_queue),
-            wait_queue: Arc::clone(&self.wait_queue),
             work,
             workers: Arc::clone(&self.workers),
             stealers: Vec::with_capacity(8),
